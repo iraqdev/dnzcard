@@ -1,0 +1,35 @@
+{
+    "name": "DNZ card",
+    "short_name": "DNZ card",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#071D4A",
+    "theme_color": "#071D4A",
+    "description": "تطبيق DNZ card لبيع بطاقات وأكواد الشحن الرقمية",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

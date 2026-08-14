@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1057658867946",
+    "project_id": "kushk-eb02a",
+    "storage_bucket": "kushk-eb02a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1057658867946:android:bced052e78ab446b8e4793",
+        "android_client_info": {
+          "package_name": "dnz.dnzteam.Kushk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCqNwOsLeegXwV1JWqP3MQNJcIAEt0VsNA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

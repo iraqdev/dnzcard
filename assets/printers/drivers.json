@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "source": "bundled",
+  "manufacturers": {
+    "SUNMI": "SUNMI",
+    "PAX": "PAX",
+    "IMIN": "IMIN",
+    "UROVO": "UROVO",
+    "TELPO": "TELPO",
+    "NEWLAND": "NEWLAND"
+  },
+  "fallbackChain": [
+    "ESC_POS",
+    "ANDROID_PRINT",
+    "USB",
+    "BLUETOOTH",
+    "NETWORK"
+  ]
+}

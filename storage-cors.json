@@ -1,0 +1,13 @@
+[
+  {
+    "origin": [
+      "https://kushk-eb02a.web.app",
+      "https://kushk-eb02a.firebaseapp.com",
+      "http://localhost:*",
+      "http://127.0.0.1:*"
+    ],
+    "method": ["GET", "HEAD", "OPTIONS"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": ["Content-Type", "Access-Control-Allow-Origin"]
+  }
+]

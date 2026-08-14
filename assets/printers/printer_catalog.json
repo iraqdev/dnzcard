@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "centerm_mthd",
+      "displayName": "Centerm / ROVOO MTHD (مدمجة)",
+      "engine": "kushkNative",
+      "nativeDriver": "CENTERM",
+      "paperMm": 58,
+      "matchAny": ["CENTERM", "ROVOO", "MTHD", "MTHD_M1", "K9"]
+    },
+    {
+      "id": "sunmi",
+      "displayName": "Sunmi (مدمجة)",
+      "engine": "sunmi",
+      "nativeDriver": "SUNMI",
+      "paperMm": 58,
+      "matchAny": ["SUNMI"]
+    },
+    {
+      "id": "senraise",
+      "displayName": "Senraise / Rovoo H10 (مدمجة)",
+      "engine": "senraise",
+      "paperMm": 58,
+      "matchAny": ["SENRAISE", "H10", "RECIEPTSERVICE"]
+    },
+    {
+      "id": "ipos_k9",
+      "displayName": "iPos / K9 (مدمجة)",
+      "engine": "k9",
+      "paperMm": 58,
+      "matchAny": ["IPOS", "TELP"]
+    },
+    {
+      "id": "pax",
+      "displayName": "PAX",
+      "engine": "switchPos",
+      "nativeDriver": "PAX",
+      "paperMm": 58,
+      "matchAny": ["PAX"]
+    },
+    {
+      "id": "imin",
+      "displayName": "iMin",
+      "engine": "kushkNative",
+      "nativeDriver": "IMIN",
+      "paperMm": 80,
+      "matchAny": ["IMIN"]
+    },
+    {
+      "id": "urovo",
+      "displayName": "Urovo",
+      "engine": "kushkNative",
+      "nativeDriver": "UROVO",
+      "paperMm": 58,
+      "matchAny": ["UROVO"]
+    },
+    {
+      "id": "newland",
+      "displayName": "Newland",
+      "engine": "kushkNative",
+      "nativeDriver": "NEWLAND",
+      "paperMm": 58,
+      "matchAny": ["NEWLAND"]
+    }
+  ]
+}

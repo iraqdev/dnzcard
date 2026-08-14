@@ -1,0 +1,400 @@
+workflows:
+  ios-release:
+    name: cards-sell ios
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    
+    environment:
+      groups:
+        - ios-release
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: dnz.dnzteam.cards
+        # Codemagic سيختار تلقائياً DIST_CERT و DIST_PROFILE
+        # بناءً على bundle_identifier و distribution_type
+      
+      vars:
+        XCODE_WORKSPACE: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        # App Store Connect API credentials
+        # يجب إضافة هذه القيم في Codemagic UI: Environment variables
+        APP_STORE_CONNECT_ISSUER_ID: dca6b398-f004-41b8-98ce-ef6553d892ea
+        APP_STORE_CONNECT_KEY_IDENTIFIER: 5RU583BNQ3
+        # APP_STORE_CONNECT_PRIVATE_KEY سيتم إضافته كـ secure variable
+      
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: true
+    
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      
+      - name: Create .env file if missing
+        script: |
+          if [ ! -f .env ]; then
+            echo "Creating empty .env file..."
+            touch .env
+            echo "# Environment variables" >> .env
+            echo "# API_BASE_URL=https://dalilakauto.com" >> .env
+            echo "# API_KEY=1234567890" >> .env
+            echo "✅ Created .env file"
+          else
+            echo "✅ .env file already exists"
+          fi
+      
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios
+          rm -f Podfile.lock
+          pod repo update
+          pod update StripePaymentsUI
+          pod install --repo-update
+      
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      
+      - name: Generate Flutter build files
+        script: |
+          # توليد ملفات Flutter المطلوبة (Generated.xcconfig, etc)
+          flutter build ios --config-only
+      
+      - name: Build iOS for App Store
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=$HOME/export_options.plist
+      
+      - name: Build iOS for Simulator (Appetize.io)
+        script: |
+          set -e
+          
+          echo "📱 Building iOS app for simulator (Appetize.io)..."
+          echo "According to Appetize.io: 'For iOS, upload a .zip or .tar.gz file containing your compressed .app bundle'"
+          echo "⚠️ Important: Must build for iphonesimulator SDK, not device!"
+          echo "⚠️ Note: Flutter doesn't support Release mode for simulators, using Debug mode instead"
+          
+          # استخدام Flutter build للمحاكي - Debug mode (Release غير مدعوم للمحاكي)
+          echo "🔨 Building for iOS Simulator using Flutter (Debug mode)..."
+          flutter build ios --debug --simulator
+          
+          echo "✅ iOS simulator build completed"
+          
+          # البحث عن .app للمحاكي
+          echo "🔍 Searching for simulator .app file..."
+          
+          # البحث في DerivedData الافتراضي - Debug (الأولوية لأننا استخدمنا --debug)
+          SIMULATOR_APP=$(find $HOME/Library/Developer/Xcode/DerivedData -path "*/Build/Products/Debug-iphonesimulator/Runner.app" -type d 2>/dev/null | head -1)
+          [ -n "$SIMULATOR_APP" ] && echo "✅ Found in Debug-iphonesimulator: $SIMULATOR_APP"
+          
+          # إذا لم يُوجد، البحث في Release (في حالة وجود بناء سابق)
+          if [ -z "$SIMULATOR_APP" ]; then
+            SIMULATOR_APP=$(find $HOME/Library/Developer/Xcode/DerivedData -path "*/Build/Products/Release-iphonesimulator/Runner.app" -type d 2>/dev/null | head -1)
+            [ -n "$SIMULATOR_APP" ] && echo "✅ Found in Release-iphonesimulator: $SIMULATOR_APP"
+          fi
+          
+          # إذا لم يُوجد، البحث في أي مكان للمحاكي
+          if [ -z "$SIMULATOR_APP" ]; then
+            SIMULATOR_APP=$(find $HOME/Library/Developer/Xcode/DerivedData -name "Runner.app" -type d -path "*iphonesimulator*" 2>/dev/null | head -1)
+            [ -n "$SIMULATOR_APP" ] && echo "✅ Found in any iphonesimulator path: $SIMULATOR_APP"
+          fi
+          
+          # إذا لم يُوجد، البحث في build/ios
+          if [ -z "$SIMULATOR_APP" ]; then
+            SIMULATOR_APP=$(find build/ios -name "Runner.app" -type d -path "*iphonesimulator*" 2>/dev/null | head -1)
+            [ -n "$SIMULATOR_APP" ] && echo "✅ Found in build/ios: $SIMULATOR_APP"
+          fi
+          
+          # التحقق من وجود الملف
+          if [ -z "$SIMULATOR_APP" ] || [ ! -d "$SIMULATOR_APP" ]; then
+            echo ""
+            echo "❌ Simulator .app file not found!"
+            echo ""
+            echo "Searching all locations..."
+            echo ""
+            echo "Default DerivedData (Debug-iphonesimulator):"
+            find $HOME/Library/Developer/Xcode/DerivedData -path "*/Build/Products/Debug-iphonesimulator/*.app" -type d 2>/dev/null | head -5 || echo "  (none found)"
+            echo ""
+            echo "Default DerivedData (Release-iphonesimulator):"
+            find $HOME/Library/Developer/Xcode/DerivedData -path "*/Build/Products/Release-iphonesimulator/*.app" -type d 2>/dev/null | head -5 || echo "  (none found)"
+            echo ""
+            echo "All .app files in DerivedData:"
+            find $HOME/Library/Developer/Xcode/DerivedData -name "Runner.app" -type d 2>/dev/null | head -10 || echo "  (none found)"
+            echo ""
+            echo "build/ios directory:"
+            find build/ios -name "*.app" -type d 2>/dev/null | head -5 || echo "  (none found)"
+            echo ""
+            echo "❌ Build may have failed or .app was not created"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ Simulator .app found: $SIMULATOR_APP"
+          ls -lh "$SIMULATOR_APP"
+          
+          # التحقق من أن الملف للمحاكي
+          if echo "$SIMULATOR_APP" | grep -q "iphonesimulator"; then
+            echo "✅ Confirmed: This is a simulator build (iphonesimulator)"
+            
+            # التحقق من أن الملف ليس للجهاز
+            if echo "$SIMULATOR_APP" | grep -q "iphoneos"; then
+              echo "❌ ERROR: This is a device build, not simulator!"
+              exit 1
+            fi
+            
+            # نسخ .app إلى مكان معروف
+            mkdir -p "$HOME/clone/build/simulator-app"
+            cp -R "$SIMULATOR_APP" "$HOME/clone/build/simulator-app/"
+            echo "✅ Copied .app to: $HOME/clone/build/simulator-app/Runner.app"
+          else
+            echo "⚠️ Warning: Path doesn't contain 'iphonesimulator'"
+            echo "   File: $SIMULATOR_APP"
+            echo "   This might not be a simulator build!"
+          fi
+      
+      - name: Create Appetize.io package
+        script: |
+          set -e  # Exit on any error
+          
+          echo "📦 Creating Appetize.io package..."
+          echo "Appetize.io requirement: 'For iOS, upload a .zip or .tar.gz file containing your compressed .app bundle'"
+          echo "⚠️ CRITICAL: Must be a simulator build (iphonesimulator), not device (iphoneos)!"
+          
+          # تعريف المتغيرات
+          ARTIFACTS_DIR="$HOME/clone/build"
+          ZIP_FILE="$ARTIFACTS_DIR/appetize-ios-app.zip"
+          TAR_GZ_FILE="$ARTIFACTS_DIR/appetize-ios-app.tar.gz"
+          APP_FILE=""
+          
+          # إنشاء مجلد artifacts إذا لم يكن موجوداً
+          mkdir -p "$ARTIFACTS_DIR"
+          
+          # البحث عن ملف .app للمحاكي فقط
+          echo "🔍 Searching for simulator .app file..."
+          
+          # البحث أولاً في المكان المحدد (من الخطوة السابقة)
+          if [ -d "$HOME/clone/build/simulator-app/Runner.app" ]; then
+            APP_FILE="$HOME/clone/build/simulator-app/Runner.app"
+            echo "✅ Found .app in predefined location: $APP_FILE"
+          fi
+          
+          # إذا لم يُوجد، البحث في DerivedData المحدد
+          if [ -z "$APP_FILE" ] || [ ! -d "$APP_FILE" ]; then
+            BUILD_DIR="$HOME/clone/build/simulator-build"
+            APP_FILE=$(find "$BUILD_DIR/DerivedData" -path "*/Build/Products/Release-iphonesimulator/Runner.app" -type d 2>/dev/null | head -1)
+            [ -n "$APP_FILE" ] && echo "✅ Found in custom DerivedData: $APP_FILE"
+          fi
+          
+          # إذا لم يُوجد، البحث في Debug
+          if [ -z "$APP_FILE" ] || [ ! -d "$APP_FILE" ]; then
+            BUILD_DIR="$HOME/clone/build/simulator-build"
+            APP_FILE=$(find "$BUILD_DIR/DerivedData" -path "*/Build/Products/Debug-iphonesimulator/Runner.app" -type d 2>/dev/null | head -1)
+            [ -n "$APP_FILE" ] && echo "✅ Found in Debug build: $APP_FILE"
+          fi
+          
+          # إذا لم يُوجد، البحث في أي مكان للمحاكي في DerivedData المحدد
+          if [ -z "$APP_FILE" ] || [ ! -d "$APP_FILE" ]; then
+            BUILD_DIR="$HOME/clone/build/simulator-build"
+            APP_FILE=$(find "$BUILD_DIR/DerivedData" -name "Runner.app" -type d -path "*iphonesimulator*" 2>/dev/null | head -1)
+            [ -n "$APP_FILE" ] && echo "✅ Found in custom DerivedData (any config): $APP_FILE"
+          fi
+          
+          # إذا لم يُوجد، البحث في DerivedData الافتراضي - Release
+          if [ -z "$APP_FILE" ] || [ ! -d "$APP_FILE" ]; then
+            APP_FILE=$(find $HOME/Library/Developer/Xcode/DerivedData -path "*/Build/Products/Release-iphonesimulator/Runner.app" -type d 2>/dev/null | head -1)
+            [ -n "$APP_FILE" ] && echo "✅ Found in default DerivedData (Release): $APP_FILE"
+          fi
+          
+          # إذا لم يُوجد، البحث في Debug
+          if [ -z "$APP_FILE" ] || [ ! -d "$APP_FILE" ]; then
+            APP_FILE=$(find $HOME/Library/Developer/Xcode/DerivedData -path "*/Build/Products/Debug-iphonesimulator/Runner.app" -type d 2>/dev/null | head -1)
+            [ -n "$APP_FILE" ] && echo "✅ Found in default DerivedData (Debug): $APP_FILE"
+          fi
+          
+          # إذا لم يُوجد، البحث في أي مكان للمحاكي فقط
+          if [ -z "$APP_FILE" ] || [ ! -d "$APP_FILE" ]; then
+            APP_FILE=$(find $HOME/Library/Developer/Xcode/DerivedData -name "Runner.app" -type d -path "*iphonesimulator*" 2>/dev/null | head -1)
+            [ -n "$APP_FILE" ] && echo "✅ Found in default DerivedData (any config): $APP_FILE"
+          fi
+          
+          # التحقق من أن الملف موجود وهو للمحاكي
+          if [ -z "$APP_FILE" ] || [ ! -d "$APP_FILE" ]; then
+            echo "❌ Simulator .app file not found!"
+            echo ""
+            echo "Searching in all locations..."
+            echo ""
+            echo "Custom build directory:"
+            find "$HOME/clone/build" -name "*.app" -type d 2>/dev/null | head -5 || echo "  (none found)"
+            echo ""
+            echo "DerivedData simulator builds (iphonesimulator):"
+            find $HOME/Library/Developer/Xcode/DerivedData -name "*.app" -type d -path "*iphonesimulator*" 2>/dev/null | head -10 || echo "  (none found)"
+            echo ""
+            echo "All .app files in DerivedData:"
+            find $HOME/Library/Developer/Xcode/DerivedData -name "Runner.app" -type d 2>/dev/null | head -10 || echo "  (none found)"
+            echo ""
+            echo "❌ Cannot create Appetize.io package without simulator .app file"
+            exit 1
+          fi
+          
+          # التحقق النهائي من أن الملف للمحاكي وليس للجهاز
+          # التحقق من المسار أولاً
+          if echo "$APP_FILE" | grep -q "iphoneos"; then
+            echo "❌ ERROR: Found device build (iphoneos), not simulator!"
+            echo "   File: $APP_FILE"
+            echo "   Appetize.io requires simulator build (iphonesimulator)"
+            exit 1
+          fi
+          
+          # إذا كان المسار لا يحتوي على iphonesimulator، نتحقق من محتوى الملف
+          if ! echo "$APP_FILE" | grep -q "iphonesimulator"; then
+            echo "⚠️ Path doesn't contain 'iphonesimulator', checking file contents..."
+            
+            # التحقق من نوع البناء باستخدام file أو otool
+            if command -v file >/dev/null 2>&1; then
+              FILE_TYPE=$(file "$APP_FILE/Runner" 2>/dev/null || echo "")
+              if echo "$FILE_TYPE" | grep -qi "simulator\|x86_64\|arm64.*simulator"; then
+                echo "✅ Confirmed: File type indicates simulator build"
+                echo "   Type: $FILE_TYPE"
+              elif echo "$FILE_TYPE" | grep -qi "arm64.*device\|armv7"; then
+                echo "❌ ERROR: File type indicates device build, not simulator!"
+                echo "   Type: $FILE_TYPE"
+                exit 1
+              else
+                echo "⚠️ Could not determine build type from file command"
+                echo "   Type: $FILE_TYPE"
+              fi
+            fi
+            
+            # التحقق باستخدام otool (أكثر دقة)
+            if command -v otool >/dev/null 2>&1 && [ -f "$APP_FILE/Runner" ]; then
+              ARCHS=$(otool -l "$APP_FILE/Runner" 2>/dev/null | grep -A 5 "LC_VERSION_MIN\|LC_BUILD_VERSION" | head -10 || echo "")
+              if echo "$ARCHS" | grep -qi "iphonesimulator\|simulator"; then
+                echo "✅ Confirmed: Binary indicates simulator build"
+              elif echo "$ARCHS" | grep -qi "iphoneos"; then
+                echo "❌ ERROR: Binary indicates device build, not simulator!"
+                exit 1
+              else
+                echo "⚠️ Could not determine build type from otool"
+              fi
+            fi
+            
+            # إذا كان الملف من المكان المحدد (build/simulator-app)، نعتبره صحيحاً
+            if echo "$APP_FILE" | grep -q "build/simulator-app"; then
+              echo "✅ File is from simulator build directory, assuming simulator build"
+            else
+              echo "❌ ERROR: Cannot confirm this is a simulator build!"
+              echo "   File: $APP_FILE"
+              echo "   Path must contain 'iphonesimulator' or be from simulator build"
+              exit 1
+            fi
+          fi
+          
+          echo ""
+          echo "✅ Found simulator .app file: $APP_FILE"
+          echo "   Size: $(du -sh "$APP_FILE" | cut -f1)"
+          echo "   Path: $APP_FILE"
+          echo "✅ Confirmed: This is a simulator build (iphonesimulator)"
+          
+          # الانتقال إلى المجلد الذي يحتوي على .app
+          APP_DIR=$(dirname "$APP_FILE")
+          APP_NAME=$(basename "$APP_FILE")
+          
+          echo ""
+          echo "📦 Creating compressed .app bundle as required by Appetize.io..."
+          echo "   Source: $APP_FILE"
+          echo "   Output: $ZIP_FILE and $TAR_GZ_FILE"
+          
+          # الانتقال إلى المجلد الذي يحتوي على .app
+          cd "$APP_DIR"
+          
+          # حذف الملفات القديمة إن وجدت
+          [ -f "$ZIP_FILE" ] && rm -f "$ZIP_FILE"
+          [ -f "$TAR_GZ_FILE" ] && rm -f "$TAR_GZ_FILE"
+          
+          # إنشاء ملف zip يحتوي على .app مباشرة
+          # استخدام خيارات zip محسّنة: -q (quiet), -r (recursive), -y (symlinks)
+          echo "   Creating ZIP archive..."
+          zip -qry "$ZIP_FILE" "$APP_NAME" || {
+            echo "❌ Failed to create ZIP file"
+            exit 1
+          }
+          
+          # إنشاء ملف tar.gz يحتوي على .app مباشرة
+          # استخدام خيارات tar محسّنة: -c (create), -z (gzip), -f (file)
+          echo "   Creating TAR.GZ archive..."
+          tar -czf "$TAR_GZ_FILE" "$APP_NAME" || {
+            echo "❌ Failed to create TAR.GZ file"
+            exit 1
+          }
+          
+          # العودة إلى المجلد الرئيسي
+          cd "$HOME/clone"
+          
+          # التحقق من وجود الملفات
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "❌ ZIP file was not created: $ZIP_FILE"
+            exit 1
+          fi
+          
+          if [ ! -f "$TAR_GZ_FILE" ]; then
+            echo "❌ TAR.GZ file was not created: $TAR_GZ_FILE"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ Created Appetize.io packages:"
+          echo "   📦 ZIP:  $ZIP_FILE ($(du -h "$ZIP_FILE" | cut -f1))"
+          echo "   📦 TAR:  $TAR_GZ_FILE ($(du -h "$TAR_GZ_FILE" | cut -f1))"
+          
+          # التحقق من محتويات الملف للتأكد من أن .app موجود مباشرة
+          echo ""
+          echo "📋 Verifying ZIP contents (should contain $APP_NAME directly):"
+          unzip -l "$ZIP_FILE" | head -20 || echo "  (verification failed)"
+          
+          echo ""
+          echo "📋 Verifying TAR.GZ contents:"
+          tar -tzf "$TAR_GZ_FILE" | head -10 || echo "  (verification failed)"
+          
+          echo ""
+          echo "✅ Package ready for Appetize.io upload!"
+          echo "   Recommended: Use $ZIP_FILE"
+          echo "   Alternative: Use $TAR_GZ_FILE"
+      
+      - name: Ensure App Store Connect key env
+        script: |
+          if [ -z "${APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY}" ] && [ -n "${APP_STORE_CONNECT_PRIVATE_KEY}" ]; then
+            export APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY="${APP_STORE_CONNECT_PRIVATE_KEY}"
+            echo "APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY populated from APP_STORE_CONNECT_PRIVATE_KEY"
+          fi
+    
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/appetize-ios-app.zip
+      - build/appetize-ios-app.tar.gz
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    
+    publishing:
+      email:
+        recipients:
+          - jaafar.albanaa@gmail.com
+        notify:
+          success: true
+          failure: true
+      
+      app_store_connect:
+        # استخدام مفاتيح App Store Connect عبر متغيرات البيئة
+        api_key: $APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+

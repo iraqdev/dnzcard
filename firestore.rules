@@ -1,0 +1,257 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc(request.auth.uid).role == 'admin';
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isShopUser() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc(request.auth.uid).role == 'shop';
+    }
+
+    function shopIsActive() {
+      return isShopUser()
+        && userDoc(request.auth.uid).status != 'suspended'
+        && userDoc(request.auth.uid).status != 'rejected';
+    }
+
+    function isSpecialCompanyId(id) {
+      return id in ['fazer_all', 'fazer_game_keys', 'fazer_world', 'fazer_topups'];
+    }
+
+    // ─── users ───
+    match /users/{userId} {
+      // get: صاحب المستند/أدمن أولاً — حتى لو المستند غير موجود بعد
+      // (مهم بعد createUser وقبل completeShopProfile).
+      // ثم قراءة متاجر shop الموجودة (للتسجيل وفحص الهاتف).
+      allow get: if (isSignedIn() && (isAdmin() || isSelf(userId)))
+        || (resource != null && resource.data.role == 'shop');
+
+      // list: استعلام الهاتف عند إنشاء الحساب (بدون auth) يشترط role == 'shop'.
+      allow list: if resource.data.role == 'shop'
+        || (isSignedIn() && isAdmin());
+
+      // walletBalance من التطبيق double (0.0) — نقبل 0 و 0.0.
+      allow create: if isSelf(userId)
+        && request.resource.data.role == 'shop'
+        && request.resource.data.status == 'approved'
+        && (request.resource.data.walletBalance == 0
+            || request.resource.data.walletBalance == 0.0);
+
+      allow update: if isAdmin() || (
+        isSelf(userId)
+        && isShopUser()
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.status == resource.data.status
+        && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny([
+              'approvedAt',
+              'approvedBy',
+              'deferredOwed',
+            ])
+      );
+
+      allow delete: if isSelf(userId) || isAdmin();
+
+      match /customPrices/{productId} {
+        allow read: if isSelf(userId) || isAdmin();
+        allow write: if isAdmin();
+      }
+
+      match /game_key_favorites/{gameId} {
+        allow read, write: if isSelf(userId);
+      }
+
+      match /topup_favorites/{categoryId} {
+        allow read, write: if isSelf(userId);
+      }
+
+      match /devices/{deviceId} {
+        allow read, write: if false;
+      }
+    }
+
+    // ─── catalog ───
+    match /companies/{companyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isSpecialCompanyId(companyId)
+        && !exists(/databases/$(database)/documents/companies/$(companyId));
+      allow update, delete: if isAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        shopIsActive()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stockCount'])
+      );
+
+      match /codes/{codeId} {
+        allow read: if isAdmin() || (
+          shopIsActive() && resource.data.status == 'available'
+        );
+        allow create, delete: if isAdmin();
+        allow update: if shopIsActive()
+          && resource.data.status == 'available'
+          && request.resource.data.status == 'sold'
+          && request.resource.data.soldTo == request.auth.uid;
+      }
+    }
+
+    // ─── orders ───
+    match /orders/{orderId} {
+      allow get: if isAdmin();
+      allow get: if isSignedIn() && resource.data.shopId == request.auth.uid;
+      allow list: if isAdmin();
+      allow list: if isSignedIn() && resource.data.shopId == request.auth.uid;
+      allow create: if shopIsActive()
+        && request.resource.data.shopId == request.auth.uid
+        && request.resource.data.status == 'completed';
+      allow update: if isAdmin();
+      allow update: if isSignedIn()
+        && resource.data.shopId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['printed', 'printCount']);
+      allow delete: if isAdmin();
+    }
+
+    // ─── wallet ───
+    match /wallet_transactions/{txId} {
+      allow get: if isAdmin();
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // قاعدتان منفصلتان حتى يعمل استعلام الأدمن (مثل type == credit) بدون userId
+      allow list: if isAdmin();
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isAdmin() || (
+        shopIsActive()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.type == 'debit'
+      );
+      allow update: if isAdmin() || (
+        isSelf(resource.data.userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userId'])
+      ) || (
+        isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userId'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /wallet_topups/{topupId} {
+      allow read: if isSignedIn() && (
+        isAdmin()
+        || resource.data.userId == request.auth.uid
+      );
+      allow create, delete: if false;
+      allow update: if isAdmin() || (
+        isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userId'])
+      );
+    }
+
+    // ─── fazer catalog (قراءة للمحلات — كتابة للأدمن/السيرفر) ───
+    match /fazer_categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow create, delete: if false;
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['sortOrder', 'customImageUrl', 'updatedAt']);
+    }
+
+    match /fazer_offers/{offerId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ─── notifications ───
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (
+        isAdmin()
+        || resource.data.userId == request.auth.uid
+      );
+      allow write: if false;
+    }
+
+    match /user_notification_state/{userId} {
+      allow read: if isSelf(userId) || isAdmin();
+      allow write: if false;
+    }
+
+    match /notification_campaigns/{campaignId} {
+      allow read, write: if false;
+    }
+
+    match /password_reset_requests/{requestId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /app_settings/{docId} {
+      allow read: if docId != 'baqaty_account' && (
+        docId == 'main'
+        || (isSignedIn() && isAdmin())
+      );
+      allow write: if docId != 'baqaty_account' && isAdmin();
+    }
+
+    // ─── bots (أدمن فقط) ───
+    match /bot_maps/{productId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /bot_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /asia_bot_maps/{productId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /asia_bot_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /asia_bot_requests/{requestId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /bot_locks/{lockId} {
+      allow read, write: if false;
+    }
+
+    // ─── مرجع الطابعات ───
+    match /printer_catalog/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ─── rate limits (سيرفر فقط) ───
+    match /_rate_limits/{docId} {
+      allow read, write: if false;
+    }
+  }
+}
