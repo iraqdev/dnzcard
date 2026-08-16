@@ -19,7 +19,7 @@ workflows:
         # App Store Connect API credentials
         # يجب إضافة هذه القيم في Codemagic UI: Environment variables
         APP_STORE_CONNECT_ISSUER_ID: dca6b398-f004-41b8-98ce-ef6553d892ea
-        APP_STORE_CONNECT_KEY_IDENTIFIER: 5RU583BNQ3
+        APP_STORE_CONNECT_KEY_IDENTIFIER: 592UFZA2Z4
         # APP_STORE_CONNECT_PRIVATE_KEY سيتم إضافته كـ secure variable
       
       flutter: 3.44.9
