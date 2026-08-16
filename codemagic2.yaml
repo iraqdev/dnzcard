@@ -1,6 +1,6 @@
 workflows:
   ios-release:
-    name: cards-sell ios
+    name: dnz card ios
     max_build_duration: 60
     instance_type: mac_mini_m2
     
@@ -9,7 +9,7 @@ workflows:
         - ios-release
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: dnz.dnzteam.cards
+        bundle_identifier: dnz.dnzteam.Kushk
         # Codemagic سيختار تلقائياً DIST_CERT و DIST_PROFILE
         # بناءً على bundle_identifier و distribution_type
       

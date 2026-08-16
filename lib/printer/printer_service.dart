@@ -143,14 +143,21 @@ class PrinterService {
       );
     }
 
-    final pdfBytes = await OrderReceiptPdf.buildForOrder(
-      order: order,
-      shopName: shopName,
-      profile: profile,
-      printNumber: printNumber,
-    );
-
-    imageBytes ??= await _imageFromPdf(pdfBytes: pdfBytes, profile: profile);
+    // بناء PDF فقط عند الحاجة: إذا تعذّر التقاط صورة المعاينة (نحتاجه كمصدر
+    // للصورة)، أو عند محرك طباعة أندرويد الذي يستهلك PDF مباشرةً. غير ذلك
+    // نتجنّب بناءه لتسريع الطباعة مع الحفاظ على نفس شكل الإيصال.
+    final needsPdf =
+        imageBytes == null || engine == PrinterEngineType.androidPrint;
+    var pdfBytes = Uint8List(0);
+    if (needsPdf) {
+      pdfBytes = await OrderReceiptPdf.buildForOrder(
+        order: order,
+        shopName: shopName,
+        profile: profile,
+        printNumber: printNumber,
+      );
+      imageBytes ??= await _imageFromPdf(pdfBytes: pdfBytes, profile: profile);
+    }
 
     await _sendToPrinter(
       engine: engine,
@@ -202,8 +209,14 @@ class PrinterService {
       );
     }
 
-    final pdfBytes = await OrderReceiptPdf.buildTest(profile: profile);
-    imageBytes ??= await _imageFromPdf(pdfBytes: pdfBytes, profile: profile);
+    // بناء PDF فقط عند الحاجة (فشل الالتقاط أو محرك طباعة أندرويد).
+    final needsPdf =
+        imageBytes == null || engine == PrinterEngineType.androidPrint;
+    var pdfBytes = Uint8List(0);
+    if (needsPdf) {
+      pdfBytes = await OrderReceiptPdf.buildTest(profile: profile);
+      imageBytes ??= await _imageFromPdf(pdfBytes: pdfBytes, profile: profile);
+    }
 
     await _sendToPrinter(
       engine: engine,

@@ -193,8 +193,8 @@ class _WalletScreenState extends State<WalletScreen> {
     if (user == null) return;
 
     setState(() => _busyOrderId = order.id);
+    final dismissSpinner = showBriefPrintSpinner(context);
     try {
-      showBriefPrintSpinner(context);
       await _printerService.printOrder(
         order,
         shopName: user.shopName,
@@ -211,6 +211,7 @@ class _WalletScreenState extends State<WalletScreen> {
         SnackBar(content: Text(PrinterUserMessages.forPrintError(e))),
       );
     } finally {
+      dismissSpinner();
       if (mounted) setState(() => _busyOrderId = null);
     }
   }

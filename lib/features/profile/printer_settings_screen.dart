@@ -358,8 +358,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
 
   Future<void> _test() async {
     setState(() => _busy = true);
+    final dismissSpinner = showBriefPrintSpinner(context);
     try {
-      showBriefPrintSpinner(context);
       await _service.testPrint(context: context);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -376,6 +376,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
         SnackBar(content: Text(PrinterUserMessages.forPrintError(e))),
       );
     } finally {
+      dismissSpinner();
       if (mounted) setState(() => _busy = false);
     }
   }

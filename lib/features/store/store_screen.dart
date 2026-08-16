@@ -571,8 +571,8 @@ class StoreScreen extends StatelessWidget {
         : 'تم الخصم وتعذرت الطباعة — البطاقة محفوظة';
 
     if (print) {
+      final dismissSpinner = showBriefPrintSpinner(context);
       try {
-        showBriefPrintSpinner(context);
         await PrinterService().printOrder(
           order,
           shopName: user.shopName,
@@ -601,6 +601,8 @@ class StoreScreen extends StatelessWidget {
           title: printFailTitle,
         );
         return;
+      } finally {
+        dismissSpinner();
       }
     }
 
@@ -709,8 +711,8 @@ class StoreScreen extends StatelessWidget {
     Navigator.of(context, rootNavigator: true).pop();
 
     if (print) {
+      final dismissSpinner = showBriefPrintSpinner(context);
       try {
-        showBriefPrintSpinner(context);
         await PrinterService().printOrder(
           order,
           shopName: user.shopName,
@@ -739,6 +741,8 @@ class StoreScreen extends StatelessWidget {
           title: 'تم الخصم وتعذرت الطباعة — البطاقة محفوظة',
         );
         return;
+      } finally {
+        dismissSpinner();
       }
     }
 
