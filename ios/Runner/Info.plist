@@ -51,6 +51,12 @@
 	<string>يحتاج التطبيق إلى موقع المحل لعرضه على خريطة الإدارة.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>يحتاج التطبيق إلى موقع المحل لعرضه على خريطة الإدارة.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>يحتاج التطبيق إلى الوصول إلى الصور لاختيار صورة بطاقة أو صورة منتج أو صورة إشعار عند الحاجة.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>يحتاج التطبيق إلى البلوتوث للاتصال بالطابعة الحرارية وطباعة إيصالات البيع.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>يحتاج التطبيق إلى البلوتوث للاتصال بالطابعة الحرارية وطباعة إيصالات البيع.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
