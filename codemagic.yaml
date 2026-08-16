@@ -22,7 +22,7 @@ workflows:
         APP_STORE_CONNECT_KEY_IDENTIFIER: 5RU583BNQ3
         # APP_STORE_CONNECT_PRIVATE_KEY سيتم إضافته كـ secure variable
       
-      flutter: stable
+      flutter: 3.44.9
       xcode: latest
       cocoapods: default
     
