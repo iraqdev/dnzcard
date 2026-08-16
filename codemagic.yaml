@@ -35,6 +35,12 @@ workflows:
           source: true
     
     scripts:
+      - name: Disable Swift Package Manager
+        script: |
+          # مكوّنات Firebase تثبّت إصدارات مختلفة من firebase-ios-sdk،
+          # وSPM التجريبي يفشل في التوفيق بينها. CocoaPods يحلّها بنجاح.
+          flutter config --no-enable-swift-package-manager
+
       - name: Get Flutter packages
         script: |
           flutter pub get
