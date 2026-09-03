@@ -22,17 +22,15 @@ class WalletService {
   }
 
   /// كل المعاملات بما فيها المخفية — لشاشة إدارة المحافظ.
+  /// الأحدث أولاً من Firestore (لا limit بدون orderBy).
   Stream<List<WalletTransaction>> watchTransactionsForAdmin(String userId) {
     return _db
         .collection('wallet_transactions')
         .where('userId', isEqualTo: userId)
-        .limit(80)
+        .orderBy('createdAt', descending: true)
+        .limit(100)
         .snapshots()
-        .map((s) {
-          final list = s.docs.map(WalletTransaction.fromFirestore).toList()
-            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return list;
-        });
+        .map((s) => s.docs.map(WalletTransaction.fromFirestore).toList());
   }
 
   /// مجموع إيداعات «آجل» لكل مستخدم (من بيانات المعاملات الحقيقية).

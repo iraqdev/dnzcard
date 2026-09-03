@@ -77,4 +77,11 @@ class SettingsService {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
+
+  Future<void> saveFazerEnabled(bool enabled) {
+    return _ref.set({
+      'fazerEnabled': enabled,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
 }

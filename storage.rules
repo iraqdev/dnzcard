@@ -2,16 +2,46 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    function isAdmin() {
-      return request.auth != null
-        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // الملف صورة وبحجم معقول (يمنع رفع ملفات تنفيذية أو أحجام ضخمة).
+    function isImageUpload() {
+      return request.resource != null
+        && request.resource.contentType.matches('image/.*')
+        && request.resource.size < 10 * 1024 * 1024;
     }
 
     // الصور عامة القراءة (كتالوج/إشعارات تظهر لكل المستخدمين).
-    // الكتابة للأدمن فقط — كل الرفع يتم من لوحة الأدمن.
+    // الكتابة محصورة بالمسارات التي ترفع إليها لوحة الأدمن فعلياً،
+    // ولمستخدم مسجّل الدخول فقط، وبصور فقط.
+    match /notification_images/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && isImageUpload();
+    }
+
+    match /notification_icons/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && isImageUpload();
+    }
+
+    match /products/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && isImageUpload();
+    }
+
+    match /companies/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && isImageUpload();
+    }
+
+    match /fazer_category_images/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && isImageUpload();
+    }
+
+    // أي مسار آخر: قراءة عامة فقط (ملفات قديمة تظهر في التطبيق)،
+    // والكتابة مرفوضة تماماً من العميل.
     match /{allPaths=**} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;
     }
   }
 }

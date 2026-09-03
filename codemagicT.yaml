@@ -1,0 +1,132 @@
+workflows:
+  ios-release:
+    name: dnz card ios
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    
+    environment:
+      groups:
+        - ios-release
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: dnz.dnzteam.Kushk
+        # Codemagic سيختار تلقائياً DIST_CERT و DIST_PROFILE
+        # بناءً على bundle_identifier و distribution_type
+      
+      vars:
+        XCODE_WORKSPACE: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        # App Store Connect API credentials
+        # يجب إضافة هذه القيم في Codemagic UI: Environment variables
+        APP_STORE_CONNECT_ISSUER_ID: dca6b398-f004-41b8-98ce-ef6553d892ea
+        APP_STORE_CONNECT_KEY_IDENTIFIER: 5RU583BNQ3
+        # APP_STORE_CONNECT_PRIVATE_KEY سيتم إضافته كـ secure variable
+      
+      flutter: 3.44.9
+      xcode: latest
+      cocoapods: default
+    
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: true
+    
+    scripts:
+      - name: Disable Swift Package Manager
+        script: |
+          # مكوّنات Firebase تثبّت إصدارات مختلفة من firebase-ios-sdk،
+          # وSPM التجريبي يفشل في التوفيق بينها. CocoaPods يحلّها بنجاح.
+          flutter config --no-enable-swift-package-manager
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      
+      - name: Verify iOS deployment target
+        script: |
+          echo "🔍 Checking iOS deployment target settings..."
+          cd ios
+          echo "Podfile platform:"
+          grep "platform :ios" Podfile || echo "⚠️ Platform not found in Podfile"
+          echo "AppFrameworkInfo.plist MinimumOSVersion:"
+          grep -A 1 "MinimumOSVersion" Flutter/AppFrameworkInfo.plist || echo "⚠️ MinimumOSVersion not found"
+          echo "Xcode project IPHONEOS_DEPLOYMENT_TARGET:"
+          grep "IPHONEOS_DEPLOYMENT_TARGET" Runner.xcodeproj/project.pbxproj | head -1 || echo "⚠️ IPHONEOS_DEPLOYMENT_TARGET not found"
+      
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios
+          # تنظيف شامل لجميع ملفات CocoaPods
+          rm -rf Pods
+          rm -rf Podfile.lock
+          rm -rf .symlinks
+          rm -rf Flutter/Flutter.framework
+          rm -rf Flutter/Flutter.podspec
+          rm -rf ~/Library/Caches/CocoaPods
+          # التحقق من Podfile
+          echo "📋 Podfile content:"
+          cat Podfile | grep -A 2 "platform :ios"
+          # تحديث مستودعات CocoaPods
+          pod repo update
+          # تثبيت dependencies
+          pod install --repo-update --verbose
+      
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      
+      - name: Verify code signing setup
+        script: |
+          echo "🔐 Verifying code signing..."
+          security find-identity -v -p codesigning | head -5
+          echo "✅ Code signing identities checked"
+      
+      - name: Set up Firebase (if needed)
+        script: |
+          echo "🔥 Checking Firebase config..."
+          if [ -f "ios/Runner/GoogleService-Info.plist" ]; then
+            echo "✅ GoogleService-Info.plist found"
+          else
+            echo "⚠️ GoogleService-Info.plist missing!"
+          fi
+          if [ -f "android/app/google-services.json" ]; then
+            echo "✅ google-services.json found"
+          else
+            echo "⚠️ google-services.json missing!"
+          fi
+      
+      - name: Build iOS
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=$HOME/export_options.plist
+      
+      - name: Ensure App Store Connect key env
+        script: |
+          if [ -z "${APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY}" ] && [ -n "${APP_STORE_CONNECT_PRIVATE_KEY}" ]; then
+            export APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY="${APP_STORE_CONNECT_PRIVATE_KEY}"
+            echo "APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY populated from APP_STORE_CONNECT_PRIVATE_KEY"
+          fi
+    
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    
+    publishing:
+      email:
+        recipients:
+          - jaafar.albanaa@gmail.com
+        notify:
+          success: true
+          failure: true
+      
+      app_store_connect:
+        # استخدام مفاتيح App Store Connect عبر متغيرات البيئة
+        api_key: $APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+

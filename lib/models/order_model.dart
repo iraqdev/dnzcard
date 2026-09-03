@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'catalog_models.dart';
+import 'fazer_models.dart';
 
 class OrderModel {
   const OrderModel({
@@ -19,6 +20,10 @@ class OrderModel {
     this.printCount = 0,
     this.source = '',
     this.fazerPriceUsd = 0,
+    this.fazerSaleRate = 0,
+    this.fazerCostRate = 0,
+    this.fazerUnitCost = 0,
+    this.fazerKind = '',
   });
 
   final String id;
@@ -38,6 +43,25 @@ class OrderModel {
   final int printCount;
   final String source;
   final double fazerPriceUsd;
+  final double fazerSaleRate;
+  final double fazerCostRate;
+  final double fazerUnitCost;
+  final String fazerKind;
+
+  /// تكلفة الوحدة لفايزr — مُثبتة وقت الشراء ولا تتأثر بتغيير الإعدادات لاحقاً.
+  double get fazerOrderUnitCost {
+    if (source != 'fazer') return 0;
+    if (fazerUnitCost > 0) return fazerUnitCost;
+    if (fazerCostRate > 0 && fazerPriceUsd > 0) {
+      return (fazerPriceUsd * fazerCostRate).roundToDouble();
+    }
+    if (fazerPriceUsd > 0 && unitPrice > 0) {
+      // طلبات قديمة: تقدير من سعر البيع المحفوظ ونسبة التكلفة/البيع الافتراضية.
+      return (unitPrice * (kFazerGameKeyCostRate / kFazerGameKeyIqdRate))
+          .roundToDouble();
+    }
+    return 0;
+  }
 
   /// رقم الطباعة التالي الذي يُظهر على الورقة.
   int get nextPrintNumber => printCount + 1;
@@ -81,6 +105,10 @@ class OrderModel {
       printCount: _asInt(d['printCount'], 0),
       source: d['source']?.toString() ?? '',
       fazerPriceUsd: (d['fazerPriceUsd'] as num?)?.toDouble() ?? 0,
+      fazerSaleRate: (d['fazerSaleRate'] as num?)?.toDouble() ?? 0,
+      fazerCostRate: (d['fazerCostRate'] as num?)?.toDouble() ?? 0,
+      fazerUnitCost: (d['fazerUnitCost'] as num?)?.toDouble() ?? 0,
+      fazerKind: d['fazerKind']?.toString() ?? '',
     );
   }
 

@@ -10,6 +10,8 @@ class AppSettings {
     this.gameKeyCostRate = 1400,
     this.minAndroidVersion = '',
     this.playStoreUrl = '',
+    this.fazerBalanceUsd,
+    this.fazerEnabled = true,
   });
 
   final String primaryColor;
@@ -20,6 +22,9 @@ class AppSettings {
   final double gameKeyCostRate;
   final String minAndroidVersion;
   final String playStoreUrl;
+  /// رصيد فايزر بالدولار — يُحدَّث من السيرفر عند المزامنة.
+  final double? fazerBalanceUsd;
+  final bool fazerEnabled;
 
   factory AppSettings.defaults() => const AppSettings(
         primaryColor: '#0B3B4A',
@@ -41,7 +46,15 @@ class AppSettings {
       gameKeyCostRate: _asRate(d['gameKeyCostRate'], 1400),
       minAndroidVersion: d['minAndroidVersion']?.toString().trim() ?? '',
       playStoreUrl: d['playStoreUrl']?.toString().trim() ?? '',
+      fazerBalanceUsd: _optionalUsd(d['fazerBalanceUsd']),
+      fazerEnabled: d['fazerEnabled'] != false,
     );
+  }
+
+  static double? _optionalUsd(dynamic value) {
+    final n = value is num ? value.toDouble() : double.tryParse('$value');
+    if (n == null || !n.isFinite || n < 0) return null;
+    return n;
   }
 
   static double _asRate(dynamic value, double fallback) {

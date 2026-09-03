@@ -28,7 +28,11 @@ class _AdminInventoryPageState extends State<AdminInventoryPage> {
     try {
       final items = CatalogService.parseInventoryLines(_codes.text);
       if (items.isEmpty) return;
-      final added = await _service.addCardItems(_productId!, items);
+      final added = await _service.addCardItems(
+        _productId!,
+        items,
+        source: 'manual',
+      );
       _codes.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(

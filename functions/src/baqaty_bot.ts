@@ -260,6 +260,17 @@ async function purchaseOne(
 
 async function uploadPins(productId: string, pins: PinItem[]): Promise<number> {
   const productRef = db.collection("products").doc(productId);
+  const productSnap = await productRef.get();
+  const productData = productSnap.data() || {};
+  const productName = String(productData.name || "");
+  const companyId = String(productData.companyId || "");
+  const unitCost = Number(productData.costPrice || 0);
+  let companyName = "";
+  if (companyId) {
+    const companySnap = await db.collection("companies").doc(companyId).get();
+    companyName = String(companySnap.data()?.name || "");
+  }
+
   const batch = db.batch();
   let added = 0;
   for (const p of pins) {
@@ -272,13 +283,24 @@ async function uploadPins(productId: string, pins: PinItem[]): Promise<number> {
       serialNumber: serial,
       status: "available",
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      source: "cloud_function",
+      source: "baqaty_bot",
     });
     added++;
   }
   if (added === 0) return 0;
   batch.update(productRef, {
     stockCount: admin.firestore.FieldValue.increment(added),
+  });
+  batch.set(db.collection("stock_uploads").doc(), {
+    productId,
+    productName,
+    companyId,
+    companyName,
+    count: added,
+    unitCost,
+    totalCost: unitCost * added,
+    source: "baqaty_bot",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   await batch.commit();
   return added;

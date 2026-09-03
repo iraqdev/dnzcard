@@ -1,11 +1,17 @@
 import * as admin from "firebase-admin";
-import {defineSecret} from "firebase-functions/params";
-import {HttpsError, onCall} from "firebase-functions/v2/https";
+import {HttpsError, onCall, onRequest} from "firebase-functions/v2/https";
 import jwt from "jsonwebtoken";
+import {
+  createQiPayment,
+  getQiPaymentStatus,
+  qiPassword,
+  qiStatusToInternal,
+  qiTerminalId,
+  qiUsername,
+} from "./qicard";
 
 const db = admin.firestore();
-const dnzApiKey = defineSecret("DNZ_GATEWAY_API_KEY");
-const DNZ_BASE = "https://gateway.dnzteam.online";
+const qiSecrets = [qiUsername, qiPassword, qiTerminalId];
 const FEE_RATE = 0.01;
 const ZAIN_CASH_FEE_RATE = 0.007;
 
@@ -67,140 +73,32 @@ async function requireActiveShop(uid: string) {
   return data;
 }
 
-async function dnzCreatePayment(params: {
-  apiKey: string;
+async function qiCreatePaymentForTopup(params: {
   productName: string;
   amount: number;
   description: string;
 }) {
-  let response: Response;
   try {
-    response = await fetch(`${DNZ_BASE}/api/payments/create`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": params.apiKey,
-      },
-      body: JSON.stringify({
-        productName: params.productName,
-        amount: params.amount,
-        currency: "IQD",
-        description: params.description,
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
+    return await createQiPayment(params);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     throw new HttpsError(
       "unavailable",
-      `تعذر الاتصال ببوابة DNZ من الخادم: ${msg}`
+      `تعذر الاتصال ببوابة كي من الخادم: ${msg}`
     );
   }
-  const text = await response.text();
-  let json: Record<string, unknown> = {};
-  try {
-    json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
-  } catch {
-    throw new HttpsError(
-      "unavailable",
-      `استجابة DNZ غير صالحة (${response.status})`
-    );
-  }
-  if (!response.ok) {
-    const message =
-      (json.message as string) ||
-      (json.error as string) ||
-      `فشل إنشاء الدفع (${response.status})`;
-    throw new HttpsError("failed-precondition", message);
-  }
-  return json;
 }
 
-async function dnzPaymentStatus(apiKey: string, paymentId: string) {
-  let response: Response;
+async function qiPaymentStatusForTopup(paymentId: string) {
   try {
-    response = await fetch(
-      `${DNZ_BASE}/api/payments/status/${encodeURIComponent(paymentId)}`,
-      {
-        method: "GET",
-        headers: {"X-API-Key": apiKey},
-        signal: AbortSignal.timeout(30000),
-      }
-    );
+    return await getQiPaymentStatus(paymentId);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     throw new HttpsError(
       "unavailable",
-      `تعذر التحقق من حالة الدفع عبر DNZ: ${msg}`
+      `تعذر التحقق من حالة الدفع عبر كي: ${msg}`
     );
   }
-  const text = await response.text();
-  let json: Record<string, unknown> = {};
-  try {
-    json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
-  } catch {
-    throw new HttpsError(
-      "unavailable",
-      `استجابة حالة الدفع غير صالحة (${response.status})`
-    );
-  }
-  if (!response.ok) {
-    const message =
-      (json.message as string) ||
-      (json.error as string) ||
-      `تعذر التحقق من الدفع (${response.status})`;
-    throw new HttpsError("failed-precondition", message);
-  }
-  return json;
-}
-
-function extractCheckoutUrl(payload: Record<string, unknown>): string {
-  const direct =
-    payload.checkoutUrl ||
-    payload.formUrl ||
-    payload.url ||
-    payload.paymentUrl;
-  if (typeof direct === "string" && direct.startsWith("http")) return direct;
-  const data = payload.data;
-  if (data && typeof data === "object") {
-    const nested = data as Record<string, unknown>;
-    const nestedUrl =
-      nested.checkoutUrl || nested.formUrl || nested.url || nested.paymentUrl;
-    if (typeof nestedUrl === "string" && nestedUrl.startsWith("http")) {
-      return nestedUrl;
-    }
-  }
-  throw new HttpsError("internal", "رابط الدفع غير موجود في استجابة DNZ");
-}
-
-function extractPaymentId(payload: Record<string, unknown>): string {
-  const candidates = [
-    payload.paymentId,
-    payload.id,
-    payload.payment_id,
-  ];
-  const data = payload.data;
-  if (data && typeof data === "object") {
-    const nested = data as Record<string, unknown>;
-    candidates.push(nested.paymentId, nested.id, nested.payment_id);
-  }
-  for (const value of candidates) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  throw new HttpsError("internal", "معرّف الدفع غير موجود في استجابة DNZ");
-}
-
-function normalizeStatus(raw: unknown): "pending" | "success" | "failed" {
-  const value = String(raw ?? "pending").toLowerCase();
-  if (
-    ["success", "successful", "paid", "completed", "complete"].includes(value)
-  ) {
-    return "success";
-  }
-  if (["failed", "fail", "error", "cancelled", "canceled", "rejected"].includes(value)) {
-    return "failed";
-  }
-  return "pending";
 }
 
 async function creditTopupIfNeeded(topupId: string): Promise<{
@@ -262,10 +160,10 @@ async function creditTopupIfNeeded(topupId: string): Promise<{
   });
 }
 
-/** إنشاء رابط دفع DNZ لشحن المحفظة. */
+/** إنشاء رابط دفع كي لشحن المحفظة. */
 export const createWalletTopup = onCall(
   {
-    secrets: [dnzApiKey],
+    secrets: qiSecrets,
     region: "me-west1",
     timeoutSeconds: 60,
     invoker: "public",
@@ -288,15 +186,13 @@ export const createWalletTopup = onCall(
     }
 
     const topupRef = db.collection("wallet_topups").doc();
-    const apiKey = dnzApiKey.value();
-    const dnz = await dnzCreatePayment({
-      apiKey,
+    const qi = await qiCreatePaymentForTopup({
       productName: `شحن محفظة كشك #${topupRef.id.slice(0, 8)}`,
       amount: fees.chargedAmount,
       description: `شحن ${fees.requestedAmount} د.ع + رسم ${fees.feeAmount}`,
     });
-    const dnzPaymentId = extractPaymentId(dnz);
-    const checkoutUrl = extractCheckoutUrl(dnz);
+    const dnzPaymentId = qi.paymentId;
+    const checkoutUrl = qi.formUrl;
 
     await topupRef.set({
       userId: uid,
@@ -326,10 +222,10 @@ export const createWalletTopup = onCall(
   }
 );
 
-/** التحقق من حالة الدفع من DNZ وإضافة الرصيد مرة واحدة فقط عند النجاح. */
+/** التحقق من حالة الدفع من كي وإضافة الرصيد مرة واحدة فقط عند النجاح. */
 export const checkWalletTopupStatus = onCall(
   {
-    secrets: [dnzApiKey],
+    secrets: qiSecrets,
     region: "me-west1",
     timeoutSeconds: 60,
     invoker: "public",
@@ -410,18 +306,12 @@ export const checkWalletTopupStatus = onCall(
       };
     }
 
-    const apiKey = dnzApiKey.value();
-    const dnz = await dnzPaymentStatus(apiKey, String(data.dnzPaymentId));
-    const status = normalizeStatus(
-      dnz.status ??
-        (dnz.data && typeof dnz.data === "object"
-          ? (dnz.data as Record<string, unknown>).status
-          : undefined)
-    );
+    const qi = await qiPaymentStatusForTopup(String(data.dnzPaymentId));
+    const status = qiStatusToInternal(qi.status);
 
     await topupRef.update({
       status,
-      dnzStatusRaw: dnz.status ?? null,
+      dnzStatusRaw: qi.status ?? null,
       lastCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -454,7 +344,7 @@ export const checkWalletTopupStatus = onCall(
 /** إعادة فحص كل عمليات الشحن المعلقة للمستخدم الحالي. */
 export const reconcilePendingWalletTopups = onCall(
   {
-    secrets: [dnzApiKey],
+    secrets: qiSecrets,
     region: "me-west1",
     timeoutSeconds: 120,
     invoker: "public",
@@ -507,19 +397,11 @@ export const reconcilePendingWalletTopups = onCall(
           continue;
         }
 
-        const dnz = await dnzPaymentStatus(
-          dnzApiKey.value(),
-          String(data.dnzPaymentId)
-        );
-        const status = normalizeStatus(
-          dnz.status ??
-            (dnz.data && typeof dnz.data === "object"
-              ? (dnz.data as Record<string, unknown>).status
-              : undefined)
-        );
+        const qi = await qiPaymentStatusForTopup(String(data.dnzPaymentId));
+        const status = qiStatusToInternal(qi.status);
         await doc.ref.update({
           status,
-          dnzStatusRaw: dnz.status ?? null,
+          dnzStatusRaw: qi.status ?? null,
           lastCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
@@ -543,6 +425,56 @@ export const reconcilePendingWalletTopups = onCall(
       }
     }
     return {ok: true, results};
+  }
+);
+
+/** إشعار كي بعد الدفع. الرصيد لا يُضاف إلا بعد التحقق من API كي. */
+export const qiPaymentWebhook = onRequest(
+  {
+    secrets: qiSecrets,
+    region: "me-west1",
+    invoker: "public",
+  },
+  async (req, res) => {
+    const body =
+      req.body && typeof req.body === "object"
+        ? (req.body as Record<string, unknown>)
+        : {};
+    const paymentId = String(body.paymentId || body.payment_id || "").trim();
+    if (!paymentId) {
+      res.status(200).json({ok: true, ignored: true});
+      return;
+    }
+    try {
+      const pending = await db
+        .collection("wallet_topups")
+        .where("dnzPaymentId", "==", paymentId)
+        .limit(1)
+        .get();
+      if (pending.empty) {
+        res.status(200).json({ok: true, ignored: true});
+        return;
+      }
+      const doc = pending.docs[0];
+      const qi = await getQiPaymentStatus(paymentId);
+      const status = qiStatusToInternal(qi.status);
+      await doc.ref.update({
+        status,
+        dnzStatusRaw: qi.status ?? null,
+        lastCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      if (status === "success") {
+        await creditTopupIfNeeded(doc.id);
+      }
+      res.status(200).json({ok: true, status});
+    } catch (error) {
+      console.error(
+        "qiPaymentWebhook",
+        error instanceof Error ? error.message : String(error)
+      );
+      res.status(200).json({ok: false});
+    }
   }
 );
 

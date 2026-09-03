@@ -201,7 +201,7 @@ class _AdminWalletsPageState extends State<AdminWalletsPage> {
                     }
                     return Column(
                       children: [
-                        for (final t in txs.take(40))
+                        for (final t in txs)
                           Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(

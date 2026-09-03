@@ -17,6 +17,7 @@ class _AdminShopLocationsPageState extends State<AdminShopLocationsPage> {
   final _service = ShopLocationService();
   final _mapController = MapController();
   String _lastFitKey = '';
+  String _searchQuery = '';
 
   static const _iraqCenter = LatLng(33.3152, 44.3661);
 
@@ -39,16 +40,28 @@ class _AdminShopLocationsPageState extends State<AdminShopLocationsPage> {
           : (d['name']?.toString().trim().isNotEmpty == true
               ? d['name'].toString().trim()
               : 'محل بدون اسم');
+      final ownerName = d['name']?.toString().trim() ?? '';
       pins.add(
         _ShopPin(
           id: doc.id,
           shopName: shopName,
+          ownerName: ownerName,
           phone: d['phone']?.toString() ?? '',
           point: LatLng(lat, lng),
         ),
       );
     }
     return pins;
+  }
+
+  bool _matchesSearch(_ShopPin pin) {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    final qPhone = q.replaceAll(RegExp(r'[\s\-+()]'), '');
+    final phone = pin.phone.replaceAll(RegExp(r'[\s\-+()]'), '');
+    return pin.shopName.toLowerCase().contains(q) ||
+        pin.ownerName.toLowerCase().contains(q) ||
+        (qPhone.isNotEmpty && phone.contains(qPhone));
   }
 
   void _fitPinsIfNeeded(List<_ShopPin> pins) {
@@ -59,7 +72,7 @@ class _AdminShopLocationsPageState extends State<AdminShopLocationsPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (pins.length == 1) {
-        _mapController.move(pins.first.point, 14);
+        _mapController.move(pins.first.point, 15);
         return;
       }
       final bounds = LatLngBounds.fromPoints(pins.map((p) => p.point).toList());
@@ -88,85 +101,113 @@ class _AdminShopLocationsPageState extends State<AdminShopLocationsPage> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final pins = _pinsFrom(snapshot.data!);
+          final allPins = _pinsFrom(snapshot.data!);
+          final pins = allPins.where(_matchesSearch).toList();
           _fitPinsIfNeeded(pins);
 
           return Column(
             children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'بحث: اسم المتجر، المسؤول، أو الهاتف',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () => setState(() => _searchQuery = ''),
+                          )
+                        : null,
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                ),
+              ),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 color: AppColors.chipBg,
                 child: Text(
-                  pins.isEmpty
-                      ? 'لا توجد مواقع محفوظة بعد. تظهر هنا المحلات التي وافقت على صلاحية الموقع.'
-                      : 'عدد المحلات على الخريطة: ${pins.length}',
+                  _searchQuery.trim().isEmpty
+                      ? (pins.isEmpty
+                          ? 'لا توجد مواقع محفوظة بعد. تظهر هنا المحلات التي وافقت على صلاحية الموقع.'
+                          : 'عدد المحلات على الخريطة: ${pins.length}')
+                      : (pins.isEmpty
+                          ? 'لا توجد نتائج مطابقة للبحث'
+                          : 'نتائج البحث: ${pins.length} من ${allPins.length}'),
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
               Expanded(
-                child: FlutterMap(
-                  mapController: _mapController,
-                  options: const MapOptions(
-                    initialCenter: _iraqCenter,
-                    initialZoom: 6.2,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'dnz.dnzteam.Kushk',
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        for (final pin in pins)
-                          Marker(
-                            point: pin.point,
-                            width: 160,
-                            height: 70,
-                            alignment: Alignment.topCenter,
-                            child: Tooltip(
-                              message: [
-                                pin.shopName,
-                                if (pin.phone.isNotEmpty) pin.phone,
-                              ].join('\n'),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary,
-                                      borderRadius: BorderRadius.circular(8),
-                                      boxShadow: AppColors.cardShadow,
-                                    ),
-                                    child: Text(
-                                      pin.shopName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                  const Icon(
-                                    Icons.location_on,
-                                    color: AppColors.danger,
-                                    size: 34,
-                                  ),
-                                ],
-                              ),
-                            ),
+                child: pins.isEmpty
+                    ? const Center(child: Text('لا توجد مواقع للعرض'))
+                    : FlutterMap(
+                        mapController: _mapController,
+                        options: const MapOptions(
+                          initialCenter: _iraqCenter,
+                          initialZoom: 6.2,
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'dnz.dnzteam.Kushk',
                           ),
-                      ],
-                    ),
-                  ],
-                ),
+                          MarkerLayer(
+                            markers: [
+                              for (final pin in pins)
+                                Marker(
+                                  point: pin.point,
+                                  width: 160,
+                                  height: 70,
+                                  alignment: Alignment.topCenter,
+                                  child: Tooltip(
+                                    message: [
+                                      pin.shopName,
+                                      if (pin.ownerName.isNotEmpty)
+                                        pin.ownerName,
+                                      if (pin.phone.isNotEmpty) pin.phone,
+                                    ].join('\n'),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            boxShadow: AppColors.cardShadow,
+                                          ),
+                                          child: Text(
+                                            pin.shopName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                        const Icon(
+                                          Icons.location_on,
+                                          color: AppColors.danger,
+                                          size: 34,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
               ),
             ],
           );
@@ -180,12 +221,14 @@ class _ShopPin {
   const _ShopPin({
     required this.id,
     required this.shopName,
+    required this.ownerName,
     required this.phone,
     required this.point,
   });
 
   final String id;
   final String shopName;
+  final String ownerName;
   final String phone;
   final LatLng point;
 }

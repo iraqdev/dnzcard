@@ -577,12 +577,15 @@ export {
   createWalletTopup,
   checkWalletTopupStatus,
   reconcilePendingWalletTopups,
+  qiPaymentWebhook,
   createZainCashTopup,
   startZainCashPayment,
   registerZainCashTransaction,
   completeZainCashTopup,
   computeTopupFee,
 } from "./wallet_topup";
+
+export {qiPaymentFinish} from "./qicard";
 
 export {
   baqatyBotStatus,
@@ -595,6 +598,8 @@ export {
 export {scanCardImage} from "./card_ocr";
 
 export {purchaseLocalProduct} from "./local_purchase";
+
+export {onInventoryCodeCreated} from "./inventory_upload_trigger";
 
 export {
   fazerGetBalance,

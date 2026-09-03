@@ -10,11 +10,14 @@ class ProductCardWidget extends StatelessWidget {
     required this.product,
     required this.onBuy,
     this.companyLogo,
+    this.soldOutText,
   });
 
   final Product product;
   final VoidCallback onBuy;
   final String? companyLogo;
+  /// نص زر عدم التوفر (افتراضي: نفد)
+  final String? soldOutText;
 
   Color _parse(String hex, Color fallback) {
     try {
@@ -129,7 +132,9 @@ class ProductCardWidget extends StatelessWidget {
                 ),
                 onPressed: product.stockCount > 0 ? onBuy : null,
                 child: Text(
-                  product.stockCount > 0 ? product.buttonText : 'نفد',
+                  product.stockCount > 0
+                      ? product.buttonText
+                      : (soldOutText ?? 'نفد'),
                   style: const TextStyle(fontSize: 11),
                 ),
               ),

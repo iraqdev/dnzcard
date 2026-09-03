@@ -117,7 +117,11 @@ class _AdminInventoryScanPageState extends State<AdminInventoryScanPage> {
 
     setState(() => _saving = true);
     try {
-      final added = await _catalog.addCardItems(productId, items);
+      final added = await _catalog.addCardItems(
+        productId,
+        items,
+        source: 'scan',
+      );
       if (!mounted) return;
       setState(() => _results = []);
       ScaffoldMessenger.of(

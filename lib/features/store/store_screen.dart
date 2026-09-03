@@ -32,16 +32,7 @@ final _settingsService = SettingsService();
 
 const _fazerPrefix = 'fazer:';
 
-bool _isFazerSelection(String? id) =>
-    id != null &&
-    (id == kFazerAllCompanyId ||
-        id == kFazerGameKeysCompanyId ||
-        id == kFazerWorldCompanyId ||
-        id == kFazerTopupsCompanyId ||
-        id.startsWith(_fazerPrefix) ||
-        id.startsWith(kFazerGkPrefix) ||
-        id.startsWith(kFazerWorldPrefix) ||
-        id.startsWith(kFazerTopupPrefix));
+bool _isFazerSelection(String? id) => isFazerCatalogSelection(id);
 
 class StoreScreen extends StatelessWidget {
   const StoreScreen({super.key});
@@ -82,6 +73,20 @@ class StoreScreen extends StatelessWidget {
         final saleRate = settingsSnap.hasError
             ? kFazerGameKeyIqdRate
             : (settingsSnap.data?.gameKeySaleRate ?? kFazerGameKeyIqdRate);
+        final fazerBalanceUsd = settingsSnap.hasError
+            ? null
+            : settingsSnap.data?.fazerBalanceUsd;
+        final fazerEnabled = settingsSnap.hasError
+            ? true
+            : (settingsSnap.data?.fazerEnabled ?? true);
+        final shopCompanies = fazerEnabled
+            ? companies
+            : companies.where((c) => !c.isFazerSpecial).toList();
+        if (!fazerEnabled && isFazer) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) catalog.selectCompany(null);
+          });
+        }
         return StreamBuilder<List<FazerCategory>>(
       stream: _fazerService.watchGameKeyCategories(),
       builder: (context, gamesSnap) {
@@ -104,6 +109,7 @@ class StoreScreen extends StatelessWidget {
           for (final o in pricedOffers) o.categoryId,
         };
         final isFazerCardCategory =
+            fazerEnabled &&
             isFazer &&
             !isFazerAll &&
             !isFazerGameKeys &&
@@ -213,11 +219,13 @@ class StoreScreen extends StatelessWidget {
           ),
           body: Column(
             children: [
-              if (companies.isNotEmpty && !isFazer)
+              if (shopCompanies.isNotEmpty && !isFazer)
                 _CompanyShortcutsBar(
-                  companies: companies
+                  companies: shopCompanies
                       .where(
-                        (c) => !c.isFazerAll || pricedOffers.isNotEmpty,
+                        (c) =>
+                            !c.isFazerAll ||
+                            (fazerEnabled && pricedOffers.isNotEmpty),
                       )
                       .toList(),
                   selectedId: selectedCompanyId,
@@ -232,17 +240,19 @@ class StoreScreen extends StatelessWidget {
                     key: ValueKey(selectedCompanyId ?? 'hub'),
                     child: !hasSelection
                         ? _CompaniesHub(
-                            companies: companies
+                            companies: shopCompanies
                                 .where(
                                   (c) =>
-                                      !c.isFazerAll || pricedOffers.isNotEmpty,
+                                      !c.isFazerAll ||
+                                      (fazerEnabled &&
+                                          pricedOffers.isNotEmpty),
                                 )
                                 .toList(),
                             loading: !companiesLoaded,
                             onSelected: (company) =>
                                 catalog.selectCompany(company.id),
                           )
-                        : isFazerAll
+                        : fazerEnabled && isFazerAll
                             ? _FazerCategoriesView(
                                 offers: pricedOffers,
                                 onCategorySelected: (categoryId) =>
@@ -250,7 +260,7 @@ class StoreScreen extends StatelessWidget {
                                   '$_fazerPrefix$categoryId',
                                 ),
                               )
-                            : isFazerGameKeys
+                            : fazerEnabled && isFazerGameKeys
                                 ? _GameKeysCategoriesView(
                                     categories: gameCategories,
                                     onGameSelected: (categoryId) =>
@@ -258,7 +268,7 @@ class StoreScreen extends StatelessWidget {
                                       '$kFazerGkPrefix$categoryId',
                                     ),
                                   )
-                                : isFazerWorld
+                                : fazerEnabled && isFazerWorld
                                     ? _FazerWorldCategoriesView(
                                         giftCategories: giftCategories,
                                         pricedCategoryIds: pricedCategoryIds,
@@ -267,7 +277,7 @@ class StoreScreen extends StatelessWidget {
                                           '$kFazerWorldPrefix$categoryId',
                                         ),
                                       )
-                                : isFazerTopups
+                                : fazerEnabled && isFazerTopups
                                     ? _FazerTopupCategoriesView(
                                         categories: topupCategories,
                                         onCategorySelected: (categoryId) =>
@@ -275,54 +285,61 @@ class StoreScreen extends StatelessWidget {
                                           '$kFazerTopupPrefix$categoryId',
                                         ),
                                       )
-                                : isFazerGkCategory
+                                : fazerEnabled && isFazerGkCategory
                                     ? _GameKeyOffersBody(
                                         key: ValueKey(
-                                          'gk-$fazerCategoryId-$saleRate',
+                                          'gk-$fazerCategoryId-$saleRate-$fazerBalanceUsd',
                                         ),
                                         categoryId: fazerCategoryId!,
                                         saleRate: saleRate,
+                                        fazerBalanceUsd: fazerBalanceUsd,
                                         onBuy: (offer) => _chooseFazerPurchase(
                                           context,
                                           offer,
                                           saleRate,
+                                          fazerBalanceUsd: fazerBalanceUsd,
                                         ),
                                       )
-                                    : isFazerWorldCategory
+                                    : fazerEnabled && isFazerWorldCategory
                                         ? _FazerWorldOffersBody(
-                                            key: ValueKey(
-                                              'world-$fazerCategoryId-$saleRate',
-                                            ),
-                                            categoryId: fazerCategoryId!,
-                                            saleRate: saleRate,
-                                            onBuy: (offer) =>
-                                                _chooseFazerPurchase(
-                                              context,
-                                              offer,
-                                              saleRate,
-                                            ),
-                                          )
-                                    : isFazerTopupCategory
+                                        key: ValueKey(
+                                          'world-$fazerCategoryId-$saleRate-$fazerBalanceUsd',
+                                        ),
+                                        categoryId: fazerCategoryId!,
+                                        saleRate: saleRate,
+                                        fazerBalanceUsd: fazerBalanceUsd,
+                                        onBuy: (offer) =>
+                                            _chooseFazerPurchase(
+                                          context,
+                                          offer,
+                                          saleRate,
+                                          fazerBalanceUsd: fazerBalanceUsd,
+                                        ),
+                                      )
+                                    : fazerEnabled && isFazerTopupCategory
                                         ? _FazerTopupOffersBody(
                                             key: ValueKey(
-                                              'topup-$fazerCategoryId-$saleRate',
+                                              'topup-$fazerCategoryId-$saleRate-$fazerBalanceUsd',
                                             ),
                                             categoryId: fazerCategoryId!,
                                             saleRate: saleRate,
+                                            fazerBalanceUsd: fazerBalanceUsd,
                                             onBuy: (offer) =>
                                                 _chooseFazerPurchase(
                                               context,
                                               offer,
                                               saleRate,
+                                              fazerBalanceUsd: fazerBalanceUsd,
                                             ),
                                           )
-                                    : isFazerCardCategory
+                                    : fazerEnabled && isFazerCardCategory
                                         ? _FazerCategoryOffersView(
                                             key: ValueKey(
-                                              'card-$fazerCategoryId-$saleRate',
+                                              'card-$fazerCategoryId-$saleRate-$fazerBalanceUsd',
                                             ),
                                             categoryId: fazerCategoryId!,
                                             offers: categoryOffers,
+                                            fazerBalanceUsd: fazerBalanceUsd,
                                             priceOf: (offer) =>
                                                 offer.gameKeyIqdPrice(saleRate),
                                             onBuy: (offer) =>
@@ -330,6 +347,7 @@ class StoreScreen extends StatelessWidget {
                                               context,
                                               offer,
                                               saleRate,
+                                              fazerBalanceUsd: fazerBalanceUsd,
                                             ),
                                           )
                                         : selectedCompany == null
@@ -398,9 +416,15 @@ class StoreScreen extends StatelessWidget {
   Future<void> _chooseFazerPurchase(
     BuildContext context,
     FazerOffer offer,
-    double saleRate,
-  ) async {
-    // جميع عروض فايزر (بما فيها جميع البطاقات): دولار × سعر البيع.
+    double saleRate, {
+    double? fazerBalanceUsd,
+  }) async {
+    if (!offer.fazerBalanceCovers(fazerBalanceUsd)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('نفذ — رصيد فايزr غير كافٍ')),
+      );
+      return;
+    }
     final price = offer.gameKeyIqdPrice(saleRate);
     String? telegramUsername;
     Map<String, String>? topupFields;
@@ -1542,12 +1566,14 @@ class _GameKeySkuList extends StatefulWidget {
     required this.offers,
     required this.onBuy,
     required this.saleRate,
+    this.fazerBalanceUsd,
   });
 
   final String categoryId;
   final List<FazerOffer> offers;
   final ValueChanged<FazerOffer> onBuy;
   final double saleRate;
+  final double? fazerBalanceUsd;
 
   @override
   State<_GameKeySkuList> createState() => _GameKeySkuListState();
@@ -1635,48 +1661,66 @@ class _GameKeySkuListState extends State<_GameKeySkuList> {
                       separatorBuilder: (_, _) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final offer = offers[index];
-                        return Material(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(12),
-                          child: InkWell(
+                        final outOfFazerBalance =
+                            !offer.fazerBalanceCovers(widget.fazerBalanceUsd);
+                        return Opacity(
+                          opacity: outOfFazerBalance ? 0.55 : 1,
+                          child: Material(
+                            color: AppColors.surface,
                             borderRadius: BorderRadius.circular(12),
-                            onTap: () => widget.onBuy(offer),
-                            child: Ink(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: AppColors.border),
-                              ),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 6,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: outOfFazerBalance
+                                  ? null
+                                  : () => widget.onBuy(offer),
+                              child: Ink(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppColors.border),
                                 ),
-                                title: Text(
-                                  offer.name.isEmpty
-                                      ? offer.displayTitle
-                                      : offer.name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 6,
                                   ),
-                                ),
-                                subtitle: Text(
-                                  [
-                                    if (game?.platform.isNotEmpty == true)
-                                      game!.platform,
-                                    if (game?.region.isNotEmpty == true)
-                                      game!.region,
-                                    if (offer.stock > 0)
-                                      'المخزون: ${offer.stock}',
-                                  ].join(' · '),
-                                ),
-                                trailing: Text(
-                                  Formatters.money(
-                                    offer.gameKeyIqdPrice(widget.saleRate),
+                                  title: Text(
+                                    offer.name.isEmpty
+                                        ? offer.displayTitle
+                                        : offer.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.accentDark,
+                                  subtitle: Text(
+                                    [
+                                      if (game?.platform.isNotEmpty == true)
+                                        game!.platform,
+                                      if (game?.region.isNotEmpty == true)
+                                        game!.region,
+                                      if (offer.stock > 0)
+                                        'المخزون: ${offer.stock}',
+                                      if (outOfFazerBalance) 'نفذ',
+                                    ].join(' · '),
                                   ),
+                                  trailing: outOfFazerBalance
+                                      ? const Text(
+                                          'نفذ',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                        )
+                                      : Text(
+                                          Formatters.money(
+                                            offer.gameKeyIqdPrice(
+                                              widget.saleRate,
+                                            ),
+                                          ),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.accentDark,
+                                          ),
+                                        ),
                                 ),
                               ),
                             ),
@@ -1893,11 +1937,13 @@ class _FazerTopupOffersBody extends StatefulWidget {
     required this.categoryId,
     required this.onBuy,
     required this.saleRate,
+    this.fazerBalanceUsd,
   });
 
   final String categoryId;
   final ValueChanged<FazerOffer> onBuy;
   final double saleRate;
+  final double? fazerBalanceUsd;
 
   @override
   State<_FazerTopupOffersBody> createState() => _FazerTopupOffersBodyState();
@@ -1954,6 +2000,7 @@ class _FazerTopupOffersBodyState extends State<_FazerTopupOffersBody> {
           categoryId: widget.categoryId,
           offers: offers,
           onBuy: widget.onBuy,
+          fazerBalanceUsd: widget.fazerBalanceUsd,
           priceOf: (offer) => offer.gameKeyIqdPrice(widget.saleRate),
           searchHint: 'بحث سريع عن شحنة...',
         );
@@ -2008,11 +2055,13 @@ class _FazerWorldOffersBody extends StatefulWidget {
     required this.categoryId,
     required this.onBuy,
     required this.saleRate,
+    this.fazerBalanceUsd,
   });
 
   final String categoryId;
   final ValueChanged<FazerOffer> onBuy;
   final double saleRate;
+  final double? fazerBalanceUsd;
 
   @override
   State<_FazerWorldOffersBody> createState() => _FazerWorldOffersBodyState();
@@ -2069,6 +2118,7 @@ class _FazerWorldOffersBodyState extends State<_FazerWorldOffersBody> {
           categoryId: widget.categoryId,
           offers: offers,
           onBuy: widget.onBuy,
+          fazerBalanceUsd: widget.fazerBalanceUsd,
           priceOf: (offer) => offer.gameKeyIqdPrice(widget.saleRate),
           searchHint: 'بحث سريع عن بطاقة...',
         );
@@ -2083,11 +2133,13 @@ class _GameKeyOffersBody extends StatefulWidget {
     required this.categoryId,
     required this.onBuy,
     required this.saleRate,
+    this.fazerBalanceUsd,
   });
 
   final String categoryId;
   final ValueChanged<FazerOffer> onBuy;
   final double saleRate;
+  final double? fazerBalanceUsd;
 
   @override
   State<_GameKeyOffersBody> createState() => _GameKeyOffersBodyState();
@@ -2139,6 +2191,7 @@ class _GameKeyOffersBodyState extends State<_GameKeyOffersBody> {
           offers: offers,
           onBuy: widget.onBuy,
           saleRate: widget.saleRate,
+          fazerBalanceUsd: widget.fazerBalanceUsd,
         );
       },
     );
@@ -2277,6 +2330,7 @@ class _FazerCategoryOffersView extends StatefulWidget {
     required this.offers,
     required this.onBuy,
     this.priceOf,
+    this.fazerBalanceUsd,
     this.searchHint = 'بحث سريع عن بطاقة...',
   });
 
@@ -2284,6 +2338,7 @@ class _FazerCategoryOffersView extends StatefulWidget {
   final List<FazerOffer> offers;
   final ValueChanged<FazerOffer> onBuy;
   final double Function(FazerOffer offer)? priceOf;
+  final double? fazerBalanceUsd;
   final String searchHint;
 
   @override
@@ -2394,12 +2449,13 @@ class _FazerCategoryOffersViewState extends State<_FazerCategoryOffersView> {
                       buttonColorHex: '#C9A227',
                       buttonText: 'شراء',
                       sortOrder: index,
-                      stockCount: offer.stock > 0 ? offer.stock : 1,
+                      stockCount: offer.fazerDisplayStock(widget.fazerBalanceUsd),
                     );
                     return RepaintBoundary(
                       child: ProductCardWidget(
                         product: product,
                         companyLogo: offer.imageUrl,
+                        soldOutText: 'نفذ',
                         onBuy: () => widget.onBuy(offer),
                       ),
                     );

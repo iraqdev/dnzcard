@@ -23,6 +23,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
   String? _resettingPinUserId;
   String? _changingPasswordUserId;
   String? _editingUserId;
+  String _searchQuery = '';
 
   Future<void> _editUser(AppUser user) async {
     final name = TextEditingController(text: user.name);
@@ -467,6 +468,16 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
 
   String _roleLabel(AppUser u) => u.role == 'admin' ? 'أدمن' : 'محل';
 
+  bool _matchesSearch(AppUser u) {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    final qPhone = q.replaceAll(RegExp(r'[\s\-+()]'), '');
+    final phone = u.phone.replaceAll(RegExp(r'[\s\-+()]'), '');
+    return u.shopName.toLowerCase().contains(q) ||
+        u.name.toLowerCase().contains(q) ||
+        (qPhone.isNotEmpty && phone.contains(qPhone));
+  }
+
   @override
   Widget build(BuildContext context) {
     final adminId = context.watch<AuthProvider>().user?.id ?? '';
@@ -478,16 +489,58 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
       body: StreamBuilder<List<AppUser>>(
         stream: service.watchUsers(),
         builder: (context, usersSnap) {
-          final users = usersSnap.data ?? [];
+          final users = (usersSnap.data ?? []).where(_matchesSearch).toList();
           if (usersSnap.connectionState == ConnectionState.waiting &&
-              users.isEmpty) {
+              (usersSnap.data ?? []).isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (users.isEmpty) {
+          if ((usersSnap.data ?? []).isEmpty) {
             return const Center(child: Text('لا يوجد مستخدمون'));
           }
+          if (users.isEmpty) {
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      hintText: 'بحث: اسم المتجر، المسؤول، أو الهاتف',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                  ),
+                ),
+                const Expanded(
+                  child: Center(child: Text('لا توجد نتائج مطابقة')),
+                ),
+              ],
+            );
+          }
 
-          return StreamBuilder<Map<String, double>>(
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'بحث: اسم المتجر، المسؤول، أو الهاتف',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () => setState(() => _searchQuery = ''),
+                          )
+                        : null,
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                ),
+              ),
+              Expanded(
+                child: StreamBuilder<Map<String, double>>(
             stream: wallet.watchDeferredDepositTotalsByUser(),
             builder: (context, deferredSnap) {
               final deferred = deferredSnap.data ?? const <String, double>{};
@@ -534,6 +587,9 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                 },
               );
             },
+          ),
+              ),
+            ],
           );
         },
       ),

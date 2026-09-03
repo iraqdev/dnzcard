@@ -193,6 +193,18 @@ class FazerOffer {
   double gameKeyIqdPrice([double saleRate = kFazerGameKeyIqdRate]) =>
       (priceUsd * saleRate).roundToDouble();
 
+  /// هل رصيد فايزr يكفي لشراء هذا العرض؟ (null = غير معروف → متاح)
+  bool fazerBalanceCovers(double? balanceUsd) {
+    if (balanceUsd == null) return true;
+    return balanceUsd + 1e-9 >= priceUsd;
+  }
+
+  /// مخزون العرض للعرض في الواجهة (0 = نفذ).
+  int fazerDisplayStock(double? balanceUsd) {
+    if (!fazerBalanceCovers(balanceUsd)) return 0;
+    return stock > 0 ? stock : 1;
+  }
+
   /// عنوان العرض كما يأتي من فايزر: اسم الفئة + اسم الفئة (مثل Ludo 68500 Gold).
   String get displayTitle {
     final cat = categoryName.trim();

@@ -8,6 +8,20 @@ const kFazerTopupsCompanyId = 'fazer_topups';
 const kFazerGkPrefix = 'fazergk:';
 const kFazerWorldPrefix = 'fazerworld:';
 const kFazerTopupPrefix = 'fazertop:';
+const kFazerCategoryPrefix = 'fazer:';
+
+/// هل هذا المعرّف يخص فايزr (شركة أو فئة فرعية)؟
+bool isFazerCatalogSelection(String? id) {
+  if (id == null || id.isEmpty) return false;
+  return id == kFazerAllCompanyId ||
+      id == kFazerGameKeysCompanyId ||
+      id == kFazerWorldCompanyId ||
+      id == kFazerTopupsCompanyId ||
+      id.startsWith(kFazerCategoryPrefix) ||
+      id.startsWith(kFazerGkPrefix) ||
+      id.startsWith(kFazerWorldPrefix) ||
+      id.startsWith(kFazerTopupPrefix);
+}
 
 DateTime _asDate(dynamic value) =>
     value is Timestamp ? value.toDate() : DateTime.now();
@@ -170,6 +184,51 @@ class CardCode {
       soldTo: d['soldTo'],
       orderId: d['orderId'],
       soldAt: d['soldAt'] is Timestamp ? _asDate(d['soldAt']) : null,
+    );
+  }
+}
+
+/// سجل عملية رفع بطاقات إلى المخزون.
+class StockUpload {
+  const StockUpload({
+    required this.id,
+    required this.productId,
+    required this.productName,
+    required this.companyId,
+    required this.companyName,
+    required this.count,
+    required this.unitCost,
+    required this.totalCost,
+    required this.source,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String productId;
+  final String productName;
+  final String companyId;
+  final String companyName;
+  final int count;
+  final double unitCost;
+  final double totalCost;
+  final String source;
+  final DateTime createdAt;
+
+  factory StockUpload.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final d = doc.data() ?? {};
+    final count = (d['count'] as num?)?.toInt() ?? 0;
+    final unitCost = (d['unitCost'] as num?)?.toDouble() ?? 0;
+    return StockUpload(
+      id: doc.id,
+      productId: d['productId']?.toString() ?? '',
+      productName: d['productName']?.toString() ?? '',
+      companyId: d['companyId']?.toString() ?? '',
+      companyName: d['companyName']?.toString() ?? '',
+      count: count,
+      unitCost: unitCost,
+      totalCost: (d['totalCost'] as num?)?.toDouble() ?? (unitCost * count),
+      source: d['source']?.toString() ?? 'manual',
+      createdAt: _asDate(d['createdAt']),
     );
   }
 }

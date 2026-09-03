@@ -5,7 +5,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/app_network_image.dart';
 import '../../models/fazer_models.dart';
+import '../../models/app_settings.dart';
 import '../../services/fazer_service.dart';
+import '../../services/settings_service.dart';
 
 class AdminFazerPage extends StatefulWidget {
   const AdminFazerPage({super.key});
@@ -16,6 +18,7 @@ class AdminFazerPage extends StatefulWidget {
 
 class _AdminFazerPageState extends State<AdminFazerPage> {
   final _service = FazerService();
+  final _settings = SettingsService();
   String? _selectedCategoryId;
   String? _selectedCategoryKind;
   String _search = '';
@@ -26,6 +29,29 @@ class _AdminFazerPageState extends State<AdminFazerPage> {
   bool _syncingOffers = false;
   String? _balanceText;
   String? _busyOfferId;
+  bool _savingFazerToggle = false;
+
+  Future<void> _setFazerEnabled(bool enabled) async {
+    setState(() => _savingFazerToggle = true);
+    try {
+      await _settings.saveFazerEnabled(enabled);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            enabled
+                ? 'تم تفعيل فايزr — تظهر للمحلات'
+                : 'تم إيقاف فايزr — مخفية عن المحلات',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _savingFazerToggle = false);
+    }
+  }
 
   @override
   void initState() {
@@ -196,8 +222,30 @@ class _AdminFazerPageState extends State<AdminFazerPage> {
           ),
         ],
       ),
-      body: Column(
+      body: StreamBuilder<AppSettings>(
+        stream: _settings.watch(),
+        builder: (context, settingsSnap) {
+          final fazerEnabled = settingsSnap.data?.fazerEnabled ?? true;
+          return Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Card(
+              child: SwitchListTile(
+                title: const Text(
+                  'إظهار فايزr في التطبيق',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  fazerEnabled
+                      ? 'كل بيانات فايزr ظاهرة للمحلات'
+                      : 'فايزr مخفية بالكامل عن المحلات',
+                ),
+                value: fazerEnabled,
+                onChanged: _savingFazerToggle ? null : _setFazerEnabled,
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Column(
@@ -373,6 +421,8 @@ class _AdminFazerPageState extends State<AdminFazerPage> {
             ),
           ),
         ],
+      );
+        },
       ),
     );
   }

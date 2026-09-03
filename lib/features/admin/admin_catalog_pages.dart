@@ -57,12 +57,29 @@ class _AdminCompaniesPageState extends State<AdminCompaniesPage> {
                   title: Text(company.name),
                   subtitle: Text(
                     company.isFazerSpecial
-                        ? '${company.isActive ? 'مفعّلة' : 'متوقفة'} · اسحب لتغيير الترتيب'
-                        : (company.isActive ? 'مفعّلة' : 'متوقفة'),
+                        ? '${company.isActive ? 'ظاهرة في التطبيق' : 'مخفية من التطبيق'} · اسحب لتغيير الترتيب'
+                        : (company.isActive
+                            ? 'ظاهرة في التطبيق'
+                            : 'مخفية من التطبيق'),
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      IconButton(
+                        tooltip: company.isActive
+                            ? 'إخفاء من التطبيق'
+                            : 'إظهار في التطبيق',
+                        icon: Icon(
+                          company.isActive
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: company.isActive
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                        ),
+                        onPressed: () =>
+                            _toggleCompanyVisibility(context, company),
+                      ),
                       IconButton(
                         tooltip: 'تعديل',
                         icon: const Icon(Icons.edit),
@@ -93,6 +110,31 @@ class _AdminCompaniesPageState extends State<AdminCompaniesPage> {
         },
       ),
     );
+  }
+
+  Future<void> _toggleCompanyVisibility(
+    BuildContext context,
+    Company company,
+  ) async {
+    final next = !company.isActive;
+    try {
+      await _service.setCompanyActive(company.id, next);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            next
+                ? '«${company.name}» ظاهرة الآن في التطبيق'
+                : '«${company.name}» مخفية من التطبيق',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تحديث ظهور الشركة: $e')),
+      );
+    }
   }
 
   Future<void> _reorder(

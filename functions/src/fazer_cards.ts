@@ -87,11 +87,23 @@ async function requireAdminOrActiveShop(uid: string): Promise<void> {
 }
 
 const DEFAULT_GAME_KEY_IQD_RATE = 1470;
+const DEFAULT_GAME_KEY_COST_RATE = 1400;
 
 async function gameKeySaleRate(): Promise<number> {
   const snap = await db.collection("app_settings").doc("main").get();
   const n = Number(snap.data()?.gameKeySaleRate);
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_GAME_KEY_IQD_RATE;
+}
+
+async function gameKeyCostRate(): Promise<number> {
+  const snap = await db.collection("app_settings").doc("main").get();
+  const n = Number(snap.data()?.gameKeyCostRate);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_GAME_KEY_COST_RATE;
+}
+
+async function isFazerEnabled(): Promise<boolean> {
+  const snap = await db.collection("app_settings").doc("main").get();
+  return snap.data()?.fazerEnabled !== false;
 }
 
 async function requireActiveShop(uid: string) {
@@ -689,6 +701,25 @@ async function refundFazerOrder(
   });
 }
 
+/** يحدّث رصيد فايزر في app_settings/main ليظهر للمحلات (نفذ عند نقص الرصيد). */
+async function syncFazerBalanceToSettings(apiKey: string): Promise<{
+  balance: number;
+  currency: string;
+}> {
+  const data = await fazerFetch(apiKey, "/balance");
+  const balance = asNumber(data.balance);
+  const currency = asString(data.currency) || "USD";
+  await db.collection("app_settings").doc("main").set(
+    {
+      fazerBalanceUsd: balance,
+      fazerBalanceCurrency: currency,
+      fazerBalanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    {merge: true}
+  );
+  return {balance, currency};
+}
+
 /** رصيد حساب فايزر (أدمن فقط). */
 export const fazerGetBalance = onCall(
   {secrets: [fazerApiKey], timeoutSeconds: 30},
@@ -697,11 +728,13 @@ export const fazerGetBalance = onCall(
       throw new HttpsError("unauthenticated", "يلزم تسجيل الدخول");
     }
     await requireAdmin(request.auth.uid);
-    const data = await fazerFetch(fazerApiKey.value(), "/balance");
+    const {balance, currency} = await syncFazerBalanceToSettings(
+      fazerApiKey.value()
+    );
     return {
       ok: true,
-      balance: asString(data.balance),
-      currency: asString(data.currency) || "USD",
+      balance: String(balance),
+      currency,
     };
   }
 );
@@ -714,12 +747,14 @@ export const fazerSyncGiftCategories = onCall(
       throw new HttpsError("unauthenticated", "يلزم تسجيل الدخول");
     }
     await requireAdmin(request.auth.uid);
+    const apiKey = fazerApiKey.value();
     const result = await commitCategoryPages({
-      apiKey: fazerApiKey.value(),
+      apiKey,
       pathBase: "/giftcards",
       kind: "gift_card",
       idField: "category_id",
     });
+    await syncFazerBalanceToSettings(apiKey);
     return {ok: true, ...result};
   }
 );
@@ -731,13 +766,15 @@ export const fazerSyncGameKeyCategories = onCall(
     if (!request.auth?.uid) {
       throw new HttpsError("unauthenticated", "يلزم تسجيل الدخول");
     }
+    const apiKey = fazerApiKey.value();
     await requireAdminOrActiveShop(request.auth.uid);
     const result = await commitCategoryPages({
-      apiKey: fazerApiKey.value(),
+      apiKey,
       pathBase: "/gamekeys",
       kind: "game_key",
       idField: "game_id",
     });
+    await syncFazerBalanceToSettings(apiKey);
     return {ok: true, ...result};
   }
 );
@@ -760,6 +797,7 @@ export const fazerSyncTopupCategories = onCall(
 
     // ربط فئات التحقق من الـ ID (إن وُجدت) بأسماء الألعاب.
     await linkTopupValidateFields(apiKey);
+    await syncFazerBalanceToSettings(apiKey);
 
     return {ok: true, ...result};
   }
@@ -775,6 +813,7 @@ export const fazerSyncTelegramCatalog = onCall(
     await requireAdmin(request.auth.uid);
     const apiKey = fazerApiKey.value();
     const result = await syncTelegramCatalogCore(apiKey);
+    await syncFazerBalanceToSettings(apiKey);
     return {ok: true, ...result};
   }
 );
@@ -816,6 +855,7 @@ export const fazerSyncCategoryOffers = onCall(
       categoryId,
       catSnap.data() as JsonMap
     );
+    await syncFazerBalanceToSettings(apiKey);
     return {ok: true, categoryId, ...result};
   }
 );
@@ -926,6 +966,12 @@ export const fazerPurchaseGiftCard = onCall(
     }
     const uid = request.auth.uid;
     await requireActiveShop(uid);
+    if (!(await isFazerEnabled())) {
+      throw new HttpsError(
+        "failed-precondition",
+        "خدمة فايزr غير متاحة حالياً"
+      );
+    }
     await assertRateLimit(
       clientRateKey("fazer_purchase", request, uid),
       40,
@@ -982,9 +1028,11 @@ export const fazerPurchaseGiftCard = onCall(
       );
     }
     // كل عروض فايزر: دولار × سعر البيع من الإعدادات.
-    const kushkPrice = Math.round(
-      asNumber(offer.priceUsd) * (await gameKeySaleRate())
-    );
+    const saleRate = await gameKeySaleRate();
+    const costRate = await gameKeyCostRate();
+    const priceUsd = asNumber(offer.priceUsd);
+    const kushkPrice = Math.round(priceUsd * saleRate);
+    const fazerUnitCost = Math.round(priceUsd * costRate);
     if (!Number.isFinite(kushkPrice) || kushkPrice <= 0) {
       throw new HttpsError(
         "failed-precondition",
@@ -1062,7 +1110,10 @@ export const fazerPurchaseGiftCard = onCall(
       fazerKind: kind,
       fazerCategoryId: categoryId,
       fazerCardId: cardId,
-      fazerPriceUsd: Number(offer.priceUsd) || 0,
+      fazerPriceUsd: priceUsd,
+      fazerSaleRate: saleRate,
+      fazerCostRate: costRate,
+      fazerUnitCost,
       telegramUsername: isTelegram ? telegramUsername : null,
       topupFields: isTopup ? topupFields : null,
       idempotencyKey,

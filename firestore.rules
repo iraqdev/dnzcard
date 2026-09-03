@@ -214,6 +214,11 @@ service cloud.firestore {
       allow write: if docId != 'baqaty_account' && isAdmin();
     }
 
+    // ─── سجل رفع المخزون ───
+    match /stock_uploads/{uploadId} {
+      allow read, write: if isAdmin();
+    }
+
     // ─── bots (أدمن فقط) ───
     match /bot_maps/{productId} {
       allow read, write: if isAdmin();

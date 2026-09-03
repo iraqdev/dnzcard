@@ -8,7 +8,9 @@ import '../../features/admin/admin_user_prices_page.dart';
 import '../../features/admin/admin_companies_page.dart';
 import '../../features/admin/admin_products_page.dart';
 import '../../features/admin/admin_fazer_page.dart';
+import '../../features/admin/admin_jaafar_page.dart';
 import '../../features/admin/admin_inventory_page.dart';
+import '../../features/admin/admin_stock_uploads_page.dart';
 import '../../features/admin/admin_inventory_scan_page.dart';
 import '../../features/admin/admin_wallets_page.dart';
 import '../../features/admin/admin_money_page.dart';
@@ -55,8 +57,16 @@ List<RouteBase> buildAdminRoutes() {
           builder: (_, _) => const AdminFazerPage(),
         ),
         GoRoute(
+          path: '/admin/jaafar',
+          builder: (_, _) => const AdminJaafarPage(),
+        ),
+        GoRoute(
           path: '/admin/inventory',
           builder: (_, _) => const AdminInventoryPage(),
+        ),
+        GoRoute(
+          path: '/admin/stock-uploads',
+          builder: (_, _) => const AdminStockUploadsPage(),
         ),
         GoRoute(
           path: '/admin/inventory-scan',

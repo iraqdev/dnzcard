@@ -124,6 +124,10 @@ class CatalogService {
     });
   }
 
+  Future<void> setCompanyActive(String id, bool active) async {
+    await _db.collection('companies').doc(id).update({'isActive': active});
+  }
+
   Future<void> saveCompany(Company company) async {
     final ref = company.id.isEmpty
         ? _db.collection('companies').doc()
@@ -233,10 +237,25 @@ class CatalogService {
         .map((s) => s.docs.map(CardCode.fromFirestore).toList());
   }
 
-  /// يضيف أزواج (رمز البطاقة، رقم التسلسل) للمخزون.
-  Future<int> addCardItems(String productId, List<CardItem> items) async {
-    final batch = _db.batch();
+  /// يضيف أزواج (رمز البطاقة، رقم التسلسل) للمخزون ويسجّل عملية الرفع.
+  Future<int> addCardItems(
+    String productId,
+    List<CardItem> items, {
+    String source = 'manual',
+  }) async {
     final productRef = _db.collection('products').doc(productId);
+    final productSnap = await productRef.get();
+    final productData = productSnap.data() ?? {};
+    final productName = (productData['name'] ?? '').toString();
+    final companyId = (productData['companyId'] ?? '').toString();
+    final unitCost = (productData['costPrice'] as num?)?.toDouble() ?? 0;
+    var companyName = '';
+    if (companyId.isNotEmpty) {
+      final companySnap = await _db.collection('companies').doc(companyId).get();
+      companyName = (companySnap.data()?['name'] ?? '').toString();
+    }
+
+    final batch = _db.batch();
     var added = 0;
     for (final item in items) {
       final code = item.code.trim();
@@ -248,13 +267,33 @@ class CatalogService {
         'serialNumber': serial,
         'status': 'available',
         'createdAt': FieldValue.serverTimestamp(),
+        'source': source,
       });
       added++;
     }
     if (added == 0) return 0;
     batch.update(productRef, {'stockCount': FieldValue.increment(added)});
+    batch.set(_db.collection('stock_uploads').doc(), {
+      'productId': productId,
+      'productName': productName,
+      'companyId': companyId,
+      'companyName': companyName,
+      'count': added,
+      'unitCost': unitCost,
+      'totalCost': unitCost * added,
+      'source': source,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
     await batch.commit();
     return added;
+  }
+
+  Stream<List<StockUpload>> watchStockUploads() {
+    return _db
+        .collection('stock_uploads')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(StockUpload.fromFirestore).toList());
   }
 
   /// يحلّل أسطر الإدخال بصيغة: رمز البطاقة | رقم التسلسل

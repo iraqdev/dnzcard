@@ -5,13 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
-import '../../models/app_settings.dart';
 import '../../models/catalog_models.dart';
-import '../../models/fazer_models.dart';
 import '../../models/order_model.dart';
-import '../../services/settings_service.dart';
 
-enum _MoneySection { asia, zain, korek, baly, fazer }
+enum _MoneySection { asia, zain, korek, baly }
 
 class AdminMoneyPage extends StatefulWidget {
   const AdminMoneyPage({super.key});
@@ -22,15 +19,12 @@ class AdminMoneyPage extends StatefulWidget {
 
 class _AdminMoneyPageState extends State<AdminMoneyPage> {
   final _db = FirebaseFirestore.instance;
-  final _settings = SettingsService();
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _ordersSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _productsSub;
-  StreamSubscription<AppSettings>? _settingsSub;
 
   List<OrderModel> _orders = [];
   Map<String, Product> _productsById = {};
-  double _gameKeyCostRate = kFazerGameKeyCostRate;
 
   _MoneySection _section = _MoneySection.asia;
   DateTime? _fromDate;
@@ -43,7 +37,6 @@ class _AdminMoneyPageState extends State<AdminMoneyPage> {
     (_MoneySection.zain, 'زين'),
     (_MoneySection.korek, 'كورك'),
     (_MoneySection.baly, 'بلي'),
-    (_MoneySection.fazer, 'فايزر'),
   ];
 
   @override
@@ -53,11 +46,6 @@ class _AdminMoneyPageState extends State<AdminMoneyPage> {
   }
 
   void _listen() {
-    _settingsSub = _settings.watch().listen((settings) {
-      if (!mounted) return;
-      setState(() => _gameKeyCostRate = settings.gameKeyCostRate);
-    }, onError: _onError);
-
     _productsSub = _db.collection('products').snapshots().listen((snap) {
       if (!mounted) return;
       final byId = <String, Product>{};
@@ -122,16 +110,11 @@ class _AdminMoneyPageState extends State<AdminMoneyPage> {
   void dispose() {
     _ordersSub?.cancel();
     _productsSub?.cancel();
-    _settingsSub?.cancel();
     super.dispose();
   }
 
   bool _matchesSection(OrderModel order, _MoneySection section) {
     if (order.status == 'failed' || order.status == 'ordering') return false;
-
-    if (section == _MoneySection.fazer) {
-      return order.source == 'fazer';
-    }
     if (order.source == 'fazer') return false;
 
     final name = order.companyName.trim().toLowerCase().replaceAll(' ', '');
@@ -146,8 +129,6 @@ class _AdminMoneyPageState extends State<AdminMoneyPage> {
         return name.contains('بلي') ||
             name.contains('baly') ||
             name.contains('play');
-      case _MoneySection.fazer:
-        return false;
     }
   }
 
@@ -177,9 +158,6 @@ class _AdminMoneyPageState extends State<AdminMoneyPage> {
   }
 
   double _unitCost(OrderModel order) {
-    if (order.source == 'fazer') {
-      return (order.fazerPriceUsd * _gameKeyCostRate).roundToDouble();
-    }
     return _productsById[order.productId]?.costPrice ?? 0;
   }
 
@@ -254,7 +232,22 @@ class _AdminMoneyPageState extends State<AdminMoneyPage> {
     final stats = _computeStats();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('إدارة الأموال')),
+      appBar: AppBar(
+        title: const Text('إدارة الأموال'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(28),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              'كروت الرصيد المحلية فقط — فايزr في شاشة جعفر',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary.withValues(alpha: 0.95),
+              ),
+            ),
+          ),
+        ),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
