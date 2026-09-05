@@ -11,6 +11,7 @@ class ProductCardWidget extends StatelessWidget {
     required this.onBuy,
     this.companyLogo,
     this.soldOutText,
+    this.hidePrice = false,
   });
 
   final Product product;
@@ -18,6 +19,7 @@ class ProductCardWidget extends StatelessWidget {
   final String? companyLogo;
   /// نص زر عدم التوفر (افتراضي: نفد)
   final String? soldOutText;
+  final bool hidePrice;
 
   Color _parse(String hex, Color fallback) {
     try {
@@ -35,7 +37,9 @@ class ProductCardWidget extends StatelessWidget {
         ? product.imageUrl
         : (companyLogo ?? '');
 
-    return Container(
+    return GestureDetector(
+      onTap: product.stockCount > 0 ? onBuy : null,
+      child: Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -107,15 +111,17 @@ class ProductCardWidget extends StatelessWidget {
               ),
             ),
           if (product.name.trim().isNotEmpty) const SizedBox(height: 4),
-          Text(
-            Formatters.money(product.price),
-            style: const TextStyle(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
+          if (!hidePrice)
+            Text(
+              Formatters.money(product.price),
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
+          if (!hidePrice) const SizedBox(height: 6),
+          if (hidePrice) const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
             child: SizedBox(
@@ -142,6 +148,7 @@ class ProductCardWidget extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }

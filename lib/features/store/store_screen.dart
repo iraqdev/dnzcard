@@ -32,6 +32,14 @@ final _settingsService = SettingsService();
 
 const _fazerPrefix = 'fazer:';
 
+void _guardGuestPurchase(BuildContext context, VoidCallback action) {
+  if (context.read<AuthProvider>().isGuest) {
+    context.push('/register');
+    return;
+  }
+  action();
+}
+
 bool _isFazerSelection(String? id) => isFazerCatalogSelection(id);
 
 class StoreScreen extends StatelessWidget {
@@ -63,6 +71,7 @@ class StoreScreen extends StatelessWidget {
         ? null
         : context.select((CatalogProvider c) => c.companyOf(selectedCompanyId));
     final userId = context.select((AuthProvider a) => a.user?.id);
+    final isGuest = context.select((AuthProvider a) => a.isGuest);
     final catalog = context.read<CatalogProvider>();
     final hasSelection = selectedCompanyId != null;
 
@@ -215,7 +224,7 @@ class StoreScreen extends StatelessWidget {
                     icon: const Icon(Icons.arrow_forward),
                   ),
             title: AppLogoTitle(title),
-            actions: const [NotificationBell()],
+            actions: isGuest ? const [] : const [NotificationBell()],
           ),
           body: Column(
             children: [
@@ -293,11 +302,15 @@ class StoreScreen extends StatelessWidget {
                                         categoryId: fazerCategoryId!,
                                         saleRate: saleRate,
                                         fazerBalanceUsd: fazerBalanceUsd,
-                                        onBuy: (offer) => _chooseFazerPurchase(
+                                        hidePrices: isGuest,
+                                        onBuy: (offer) => _guardGuestPurchase(
                                           context,
-                                          offer,
-                                          saleRate,
-                                          fazerBalanceUsd: fazerBalanceUsd,
+                                          () => _chooseFazerPurchase(
+                                            context,
+                                            offer,
+                                            saleRate,
+                                            fazerBalanceUsd: fazerBalanceUsd,
+                                          ),
                                         ),
                                       )
                                     : fazerEnabled && isFazerWorldCategory
@@ -308,12 +321,15 @@ class StoreScreen extends StatelessWidget {
                                         categoryId: fazerCategoryId!,
                                         saleRate: saleRate,
                                         fazerBalanceUsd: fazerBalanceUsd,
-                                        onBuy: (offer) =>
-                                            _chooseFazerPurchase(
+                                        hidePrices: isGuest,
+                                        onBuy: (offer) => _guardGuestPurchase(
                                           context,
-                                          offer,
-                                          saleRate,
-                                          fazerBalanceUsd: fazerBalanceUsd,
+                                          () => _chooseFazerPurchase(
+                                            context,
+                                            offer,
+                                            saleRate,
+                                            fazerBalanceUsd: fazerBalanceUsd,
+                                          ),
                                         ),
                                       )
                                     : fazerEnabled && isFazerTopupCategory
@@ -324,12 +340,15 @@ class StoreScreen extends StatelessWidget {
                                             categoryId: fazerCategoryId!,
                                             saleRate: saleRate,
                                             fazerBalanceUsd: fazerBalanceUsd,
-                                            onBuy: (offer) =>
-                                                _chooseFazerPurchase(
+                                            hidePrices: isGuest,
+                                            onBuy: (offer) => _guardGuestPurchase(
                                               context,
-                                              offer,
-                                              saleRate,
-                                              fazerBalanceUsd: fazerBalanceUsd,
+                                              () => _chooseFazerPurchase(
+                                                context,
+                                                offer,
+                                                saleRate,
+                                                fazerBalanceUsd: fazerBalanceUsd,
+                                              ),
                                             ),
                                           )
                                     : fazerEnabled && isFazerCardCategory
@@ -340,14 +359,17 @@ class StoreScreen extends StatelessWidget {
                                             categoryId: fazerCategoryId!,
                                             offers: categoryOffers,
                                             fazerBalanceUsd: fazerBalanceUsd,
+                                            hidePrices: isGuest,
                                             priceOf: (offer) =>
                                                 offer.gameKeyIqdPrice(saleRate),
-                                            onBuy: (offer) =>
-                                                _chooseFazerPurchase(
+                                            onBuy: (offer) => _guardGuestPurchase(
                                               context,
-                                              offer,
-                                              saleRate,
-                                              fazerBalanceUsd: fazerBalanceUsd,
+                                              () => _chooseFazerPurchase(
+                                                context,
+                                                offer,
+                                                saleRate,
+                                                fazerBalanceUsd: fazerBalanceUsd,
+                                              ),
                                             ),
                                           )
                                         : selectedCompany == null
@@ -359,11 +381,15 @@ class StoreScreen extends StatelessWidget {
                                             : _PricedProductsBody(
                                                 company: selectedCompany,
                                                 userId: userId,
+                                                hidePrices: isGuest,
                                                 onSearch: catalog.search,
                                                 onBuy: (product) =>
-                                                    _choosePurchaseAction(
+                                                    _guardGuestPurchase(
                                                   context,
-                                                  product,
+                                                  () => _choosePurchaseAction(
+                                                    context,
+                                                    product,
+                                                  ),
                                                 ),
                                               ),
                   ),
@@ -1567,6 +1593,7 @@ class _GameKeySkuList extends StatefulWidget {
     required this.onBuy,
     required this.saleRate,
     this.fazerBalanceUsd,
+    this.hidePrices = false,
   });
 
   final String categoryId;
@@ -1574,6 +1601,7 @@ class _GameKeySkuList extends StatefulWidget {
   final ValueChanged<FazerOffer> onBuy;
   final double saleRate;
   final double? fazerBalanceUsd;
+  final bool hidePrices;
 
   @override
   State<_GameKeySkuList> createState() => _GameKeySkuListState();
@@ -1710,7 +1738,13 @@ class _GameKeySkuListState extends State<_GameKeySkuList> {
                                             color: AppColors.textSecondary,
                                           ),
                                         )
-                                      : Text(
+                                      : widget.hidePrices
+                                          ? TextButton(
+                                              onPressed: () =>
+                                                  widget.onBuy(offer),
+                                              child: const Text('شراء'),
+                                            )
+                                          : Text(
                                           Formatters.money(
                                             offer.gameKeyIqdPrice(
                                               widget.saleRate,
@@ -1938,12 +1972,14 @@ class _FazerTopupOffersBody extends StatefulWidget {
     required this.onBuy,
     required this.saleRate,
     this.fazerBalanceUsd,
+    this.hidePrices = false,
   });
 
   final String categoryId;
   final ValueChanged<FazerOffer> onBuy;
   final double saleRate;
   final double? fazerBalanceUsd;
+  final bool hidePrices;
 
   @override
   State<_FazerTopupOffersBody> createState() => _FazerTopupOffersBodyState();
@@ -2001,6 +2037,7 @@ class _FazerTopupOffersBodyState extends State<_FazerTopupOffersBody> {
           offers: offers,
           onBuy: widget.onBuy,
           fazerBalanceUsd: widget.fazerBalanceUsd,
+          hidePrices: widget.hidePrices,
           priceOf: (offer) => offer.gameKeyIqdPrice(widget.saleRate),
           searchHint: 'بحث سريع عن شحنة...',
         );
@@ -2056,12 +2093,14 @@ class _FazerWorldOffersBody extends StatefulWidget {
     required this.onBuy,
     required this.saleRate,
     this.fazerBalanceUsd,
+    this.hidePrices = false,
   });
 
   final String categoryId;
   final ValueChanged<FazerOffer> onBuy;
   final double saleRate;
   final double? fazerBalanceUsd;
+  final bool hidePrices;
 
   @override
   State<_FazerWorldOffersBody> createState() => _FazerWorldOffersBodyState();
@@ -2119,6 +2158,7 @@ class _FazerWorldOffersBodyState extends State<_FazerWorldOffersBody> {
           offers: offers,
           onBuy: widget.onBuy,
           fazerBalanceUsd: widget.fazerBalanceUsd,
+          hidePrices: widget.hidePrices,
           priceOf: (offer) => offer.gameKeyIqdPrice(widget.saleRate),
           searchHint: 'بحث سريع عن بطاقة...',
         );
@@ -2134,12 +2174,14 @@ class _GameKeyOffersBody extends StatefulWidget {
     required this.onBuy,
     required this.saleRate,
     this.fazerBalanceUsd,
+    this.hidePrices = false,
   });
 
   final String categoryId;
   final ValueChanged<FazerOffer> onBuy;
   final double saleRate;
   final double? fazerBalanceUsd;
+  final bool hidePrices;
 
   @override
   State<_GameKeyOffersBody> createState() => _GameKeyOffersBodyState();
@@ -2192,6 +2234,7 @@ class _GameKeyOffersBodyState extends State<_GameKeyOffersBody> {
           onBuy: widget.onBuy,
           saleRate: widget.saleRate,
           fazerBalanceUsd: widget.fazerBalanceUsd,
+          hidePrices: widget.hidePrices,
         );
       },
     );
@@ -2332,6 +2375,7 @@ class _FazerCategoryOffersView extends StatefulWidget {
     this.priceOf,
     this.fazerBalanceUsd,
     this.searchHint = 'بحث سريع عن بطاقة...',
+    this.hidePrices = false,
   });
 
   final String categoryId;
@@ -2340,6 +2384,7 @@ class _FazerCategoryOffersView extends StatefulWidget {
   final double Function(FazerOffer offer)? priceOf;
   final double? fazerBalanceUsd;
   final String searchHint;
+  final bool hidePrices;
 
   @override
   State<_FazerCategoryOffersView> createState() =>
@@ -2456,6 +2501,7 @@ class _FazerCategoryOffersViewState extends State<_FazerCategoryOffersView> {
                         product: product,
                         companyLogo: offer.imageUrl,
                         soldOutText: 'نفذ',
+                        hidePrice: widget.hidePrices,
                         onBuy: () => widget.onBuy(offer),
                       ),
                     );
@@ -2473,12 +2519,14 @@ class _PricedProductsBody extends StatelessWidget {
     required this.userId,
     required this.onSearch,
     required this.onBuy,
+    this.hidePrices = false,
   });
 
   final Company company;
   final String? userId;
   final ValueChanged<String> onSearch;
   final ValueChanged<Product> onBuy;
+  final bool hidePrices;
 
   @override
   Widget build(BuildContext context) {
@@ -2499,6 +2547,7 @@ class _PricedProductsBody extends StatelessWidget {
           products: priced,
           onSearch: onSearch,
           onBuy: onBuy,
+          hidePrices: hidePrices,
         );
       },
     );
@@ -2552,12 +2601,14 @@ class _ProductsView extends StatefulWidget {
     required this.products,
     required this.onSearch,
     required this.onBuy,
+    this.hidePrices = false,
   });
 
   final Company company;
   final List<Product> products;
   final ValueChanged<String> onSearch;
   final ValueChanged<Product> onBuy;
+  final bool hidePrices;
 
   @override
   State<_ProductsView> createState() => _ProductsViewState();
@@ -2611,6 +2662,7 @@ class _ProductsViewState extends State<_ProductsView> {
                       child: ProductCardWidget(
                         product: product,
                         companyLogo: widget.company.logoUrl,
+                        hidePrice: widget.hidePrices,
                         onBuy: () => widget.onBuy(product),
                       ),
                     );

@@ -84,6 +84,23 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _enterAsGuest() async {
+    setState(() => _busy = true);
+    try {
+      await context.read<AuthProvider>().loginAsGuest();
+      if (!mounted) return;
+      context.go('/store');
+    } catch (_) {
+      if (!mounted) return;
+      final err = context.read<AuthProvider>().error;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(err ?? 'تعذر الدخول كضيف')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = widget.isAdminPortal;
@@ -175,6 +192,20 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextButton(
                     onPressed: () => context.push('/register'),
                     child: const Text('إنشاء حساب متجر جديد'),
+                  ),
+                  const SizedBox(height: 4),
+                  OutlinedButton(
+                    onPressed: _busy ? null : _enterAsGuest,
+                    child: const Text('دخول كضيف'),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'تصفّح المتجر بدون حساب — الأسعار مخفية حتى التسجيل',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary.withValues(alpha: 0.9),
+                    ),
                   ),
                 ],
               ],

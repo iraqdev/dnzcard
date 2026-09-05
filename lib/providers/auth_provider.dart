@@ -46,6 +46,9 @@ class AuthProvider extends ChangeNotifier {
   AppUser? get user => _user;
   bool get loading => _loading;
   String? get error => _error;
+  bool get isGuest =>
+      _auth.currentFirebaseUser != null &&
+      (_auth.currentFirebaseUser!.isAnonymous);
   bool get isLoggedIn =>
       _auth.currentFirebaseUser != null &&
       !(_auth.currentFirebaseUser!.isAnonymous);
@@ -76,6 +79,23 @@ class AuthProvider extends ChangeNotifier {
   /// توافق مع الشاشات القديمة التي تستدعي login.
   Future<void> login(String phone, String password) =>
       loginAdmin(phone, password);
+
+  /// دخول كضيف — تصفح المتجر بدون حساب (موبايل فقط).
+  Future<void> loginAsGuest() async {
+    _error = null;
+    _loading = true;
+    notifyListeners();
+    try {
+      await _auth.ensureAnonymous();
+      _loading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = 'تعذر الدخول كضيف. تحقق من الاتصال وحاول مجدداً.';
+      _loading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
 
   /// دخول المتجر برقم هاتف وكلمة مرور (بدون OTP).
   Future<PhoneAuthOutcome> loginShop(String phone, String password) async {

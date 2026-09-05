@@ -47,6 +47,7 @@ class AuthService {
 
     _pendingPhone = normalized;
     final authEmail = phoneToAuthEmail(normalized);
+    await _signOutAnonymousIfNeeded();
     try {
       await _auth.signInWithEmailAndPassword(
         email: authEmail,
@@ -75,6 +76,7 @@ class AuthService {
 
     _pendingPhone = normalized;
     final authEmail = phoneToAuthEmail(normalized);
+    await _signOutAnonymousIfNeeded();
     try {
       await _auth.createUserWithEmailAndPassword(
         email: authEmail,
@@ -238,6 +240,13 @@ class AuthService {
   Future<void> ensureAnonymous() async {
     if (_auth.currentUser != null) return;
     await _auth.signInAnonymously();
+  }
+
+  Future<void> _signOutAnonymousIfNeeded() async {
+    final user = _auth.currentUser;
+    if (user != null && user.isAnonymous) {
+      await _auth.signOut();
+    }
   }
 
   Future<void> logout() async {
