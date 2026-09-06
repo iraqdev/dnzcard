@@ -36,6 +36,11 @@ service cloud.firestore {
       return id in ['fazer_all', 'fazer_game_keys', 'fazer_world', 'fazer_topups'];
     }
 
+    // تصفح الكتalog بدون تسجيل (وضع الضيف — الأسعار تُخفى من التطبيق).
+    function canBrowseCatalog() {
+      return true;
+    }
+
     // ─── users ───
     match /users/{userId} {
       // get: صاحب المستند/أدمن أولاً — حتى لو المستند غير موجود بعد
@@ -90,14 +95,14 @@ service cloud.firestore {
 
     // ─── catalog ───
     match /companies/{companyId} {
-      allow read: if isSignedIn();
+      allow read: if canBrowseCatalog();
       allow create: if isSignedIn() && isSpecialCompanyId(companyId)
         && !exists(/databases/$(database)/documents/companies/$(companyId));
       allow update, delete: if isAdmin();
     }
 
     match /products/{productId} {
-      allow read: if isSignedIn();
+      allow read: if canBrowseCatalog();
       allow create, delete: if isAdmin();
       allow update: if isAdmin() || (
         shopIsActive()
@@ -171,7 +176,7 @@ service cloud.firestore {
 
     // ─── fazer catalog (قراءة للمحلات — كتابة للأدمن/السيرفر) ───
     match /fazer_categories/{categoryId} {
-      allow read: if isSignedIn();
+      allow read: if canBrowseCatalog();
       allow create, delete: if false;
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys()
@@ -179,7 +184,7 @@ service cloud.firestore {
     }
 
     match /fazer_offers/{offerId} {
-      allow read: if isSignedIn();
+      allow read: if canBrowseCatalog();
       allow write: if false;
     }
 

@@ -10,7 +10,7 @@ class TopupFee {
   static const superKeyRate = 0.0;
 
   /// الحد الأدنى لمبلغ الإيداع عبر سوبر كي.
-  static const superKeyMinAmount = 500000;
+  static const superKeyMinAmount = 5000000;
 
   /// للتوافق مع المسار القديم (بطاقة).
   static const rate = cardRate;

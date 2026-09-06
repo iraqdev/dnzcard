@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
+import '../../models/app_user.dart';
 import '../../models/wallet_transaction.dart';
 import '../../services/admin_service.dart';
 import '../../services/wallet_service.dart';
@@ -14,6 +15,7 @@ class AdminWalletsPage extends StatefulWidget {
 
 class _AdminWalletsPageState extends State<AdminWalletsPage> {
   String? _userId;
+  final _shopSearch = TextEditingController();
   final _amount = TextEditingController();
   final _reason = TextEditingController(text: 'شحن رصيد من الإدارة');
   String _type = 'credit';
@@ -23,9 +25,32 @@ class _AdminWalletsPageState extends State<AdminWalletsPage> {
 
   @override
   void dispose() {
+    _shopSearch.dispose();
     _amount.dispose();
     _reason.dispose();
     super.dispose();
+  }
+
+  String _shopLabel(AppUser user) {
+    final shop = user.shopName.trim();
+    final name = user.name.trim();
+    final title = shop.isNotEmpty ? shop : name;
+    return '$title · ${user.phone} · ${Formatters.money(user.walletBalance)}';
+  }
+
+  bool _matchesShopQuery(AppUser user, String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    return user.shopName.toLowerCase().contains(q) ||
+        user.name.toLowerCase().contains(q) ||
+        user.phone.contains(q);
+  }
+
+  void _selectShop(AppUser user) {
+    setState(() {
+      _userId = user.id;
+      _shopSearch.text = _shopLabel(user);
+    });
   }
 
   Future<void> _submit() async {
@@ -65,26 +90,95 @@ class _AdminWalletsPageState extends State<AdminWalletsPage> {
       body: StreamBuilder(
         stream: AdminService().watchUsers(),
         builder: (context, snapshot) {
-          final users = snapshot.data ?? [];
-          _userId ??= users.isNotEmpty ? users.first.id : null;
+          final users = (snapshot.data ?? [])
+              .where((u) => u.role == 'shop')
+              .toList();
+          if (_userId == null && users.isNotEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted || _userId != null) return;
+              _selectShop(users.first);
+            });
+          }
           final selected = users.where((u) => u.id == _userId).firstOrNull;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              DropdownButtonFormField<String>(
-                initialValue: _userId,
-                items: users
-                    .map(
-                      (u) => DropdownMenuItem(
-                        value: u.id,
-                        child: Text(
-                          '${u.shopName} (${Formatters.money(u.walletBalance)})',
+              Autocomplete<AppUser>(
+                displayStringForOption: _shopLabel,
+                optionsBuilder: (textEditingValue) {
+                  final q = textEditingValue.text.trim();
+                  final matches =
+                      users.where((u) => _matchesShopQuery(u, q)).toList();
+                  if (q.isEmpty) return matches.take(12);
+                  return matches.take(20);
+                },
+                onSelected: _selectShop,
+                fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+                  if (selected != null &&
+                      controller.text.isEmpty &&
+                      _shopSearch.text.isNotEmpty) {
+                    controller.text = _shopSearch.text;
+                  }
+                  return TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    onChanged: (value) {
+                      _shopSearch.text = value;
+                      if (selected != null &&
+                          value.trim() != _shopLabel(selected)) {
+                        setState(() => _userId = null);
+                      }
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'المتجر',
+                      hintText: 'ابحث باسم المتجر أو رقم الهاتف',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                  );
+                },
+                optionsViewBuilder: (context, onSelected, options) {
+                  final opts = options.toList();
+                  if (opts.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  return Align(
+                    alignment: Alignment.topRight,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxHeight: 280,
+                          maxWidth: 520,
+                        ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: opts.length,
+                          itemBuilder: (context, index) {
+                            final user = opts[index];
+                            return ListTile(
+                              dense: true,
+                              title: Text(
+                                user.shopName.trim().isNotEmpty
+                                    ? user.shopName
+                                    : user.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '${user.phone} · ${Formatters.money(user.walletBalance)}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              onTap: () => onSelected(user),
+                            );
+                          },
                         ),
                       ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => _userId = v),
-                decoration: const InputDecoration(labelText: 'المتجر'),
+                    ),
+                  );
+                },
               ),
               if (selected != null) ...[
                 const SizedBox(height: 8),

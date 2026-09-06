@@ -18,6 +18,7 @@ class AuthProvider extends ChangeNotifier {
     _sub = _auth.watchCurrentUser().listen(
       (user) {
         _user = user;
+        if (user != null) _localGuestMode = false;
         _loading = false;
         notifyListeners();
       },
@@ -42,13 +43,15 @@ class AuthProvider extends ChangeNotifier {
   bool _otpSent = false;
   bool _awaitingProfile = false;
   String? _verifiedPhone;
+  bool _localGuestMode = false;
 
   AppUser? get user => _user;
   bool get loading => _loading;
   String? get error => _error;
   bool get isGuest =>
-      _auth.currentFirebaseUser != null &&
-      (_auth.currentFirebaseUser!.isAnonymous);
+      _localGuestMode ||
+      (_auth.currentFirebaseUser != null &&
+          (_auth.currentFirebaseUser!.isAnonymous));
   bool get isLoggedIn =>
       _auth.currentFirebaseUser != null &&
       !(_auth.currentFirebaseUser!.isAnonymous);
@@ -87,18 +90,18 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     try {
       await _auth.ensureAnonymous();
-      _loading = false;
-      notifyListeners();
-    } catch (e) {
-      _error = 'تعذر الدخول كضيف. تحقق من الاتصال وحاول مجدداً.';
-      _loading = false;
-      notifyListeners();
-      rethrow;
+      _localGuestMode = false;
+    } catch (_) {
+      // إذا Anonymous Auth غير مفعّل أو App Check يمنعه — تصفح محلي بدون Auth.
+      _localGuestMode = true;
     }
+    _loading = false;
+    notifyListeners();
   }
 
   /// دخول المتجر برقم هاتف وكلمة مرور (بدون OTP).
   Future<PhoneAuthOutcome> loginShop(String phone, String password) async {
+    _localGuestMode = false;
     _error = null;
     _loading = true;
     _otpSent = false;
@@ -122,6 +125,7 @@ class AuthProvider extends ChangeNotifier {
 
   /// إنشاء حساب متجر برقم هاتف وكلمة مرور (بدون OTP).
   Future<PhoneAuthOutcome> registerShop(String phone, String password) async {
+    _localGuestMode = false;
     _error = null;
     _loading = true;
     _otpSent = false;
@@ -314,6 +318,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    _localGuestMode = false;
     clearOtpFlow();
     await _auth.logout();
   }

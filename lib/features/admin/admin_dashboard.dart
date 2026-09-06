@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
+import '../../models/app_user.dart';
 import '../../models/catalog_models.dart';
 import '../../models/order_model.dart';
 import '../../models/wallet_topup.dart';
@@ -68,6 +69,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   String? _error;
 
   Map<String, Product> _productsById = {};
+  Map<String, AppUser> _usersById = {};
 
   bool _ordersSubscribed = false;
   DateTime? _appliedOrdersReset;
@@ -105,14 +107,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
       if (!mounted) return;
       var walletTotal = 0.0;
       var deferredTotal = 0.0;
+      final usersById = <String, AppUser>{};
       for (final doc in snap.docs) {
-        final data = doc.data();
-        if (data['role'] != 'shop') continue;
-        walletTotal += (data['walletBalance'] as num?)?.toDouble() ?? 0;
-        deferredTotal += (data['deferredOwed'] as num?)?.toDouble() ?? 0;
+        AppUser? user;
+        try {
+          user = AppUser.fromFirestore(doc);
+        } catch (_) {
+          continue;
+        }
+        usersById[user.id] = user;
+        if (user.role != 'shop') continue;
+        walletTotal += user.walletBalance;
+        deferredTotal += user.deferredOwed ?? 0;
       }
       setState(() {
         _users = snap.docs.length;
+        _usersById = usersById;
         _shopsWalletTotal = walletTotal;
         _shopsDeferredTotal = deferredTotal;
         _loading = false;
@@ -459,6 +469,101 @@ class _AdminDashboardState extends State<AdminDashboard> {
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
+  List<WalletTransaction> _depositsForDetail({bool todayOnly = false}) {
+    final now = DateTime.now();
+    final list = _creditTxCache.where((tx) {
+      if (!_countsInStats(tx.createdAt)) return false;
+      if (todayOnly && !_isSameDay(tx.createdAt, now)) return false;
+      return true;
+    }).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
+  }
+
+  String _depositsDetailTitle({required bool todayOnly}) {
+    if (todayOnly) return 'إيداعات اليوم';
+    if (_hasDateFilter) {
+      final from = _fromDate != null ? Formatters.shortDate(_fromDate!) : '…';
+      final to = _toDate != null ? Formatters.shortDate(_toDate!) : '…';
+      return 'إيداعات الفترة ($from — $to)';
+    }
+    return 'إجمالي الإيداعات';
+  }
+
+  String _userDepositLabel(String userId) {
+    final user = _usersById[userId];
+    if (user == null) return 'مستخدم غير معروف';
+    final shop = user.shopName.trim();
+    final name = user.name.trim();
+    final phone = user.phone.trim();
+    final parts = <String>[
+      if (shop.isNotEmpty) shop else if (name.isNotEmpty) name,
+      if (phone.isNotEmpty) phone,
+    ];
+    return parts.isEmpty ? userId : parts.join(' · ');
+  }
+
+  Future<void> _showDepositsDetail({required bool todayOnly}) async {
+    final deposits = _depositsForDetail(todayOnly: todayOnly);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text(_depositsDetailTitle(todayOnly: todayOnly)),
+          content: SizedBox(
+            width: 520,
+            child: deposits.isEmpty
+                ? const Text(
+                    'لا توجد إيداعات في هذه الفترة',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  )
+                : SizedBox(
+                    height: 420,
+                    child: ListView.separated(
+                      itemCount: deposits.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final tx = deposits[index];
+                        final method =
+                            tx.depositMethod ?? WalletDepositMethod.cash;
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            _userDepositLabel(tx.userId),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          subtitle: Text(
+                            [
+                              Formatters.date(tx.createdAt),
+                              method.labelAr,
+                              if (tx.reason.trim().isNotEmpty) tx.reason.trim(),
+                            ].join(' · '),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          trailing: Text(
+                            Formatters.money(tx.amount),
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _onError(Object e) {
     if (!mounted) return;
     setState(() {
@@ -801,6 +906,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         color: Colors.green,
                         icon: Icons.today_outlined,
                         wide: true,
+                        onTap: () => _showDepositsDetail(todayOnly: true),
                       ),
                       _StatCard(
                         title: 'مبيعات اليوم (عدد الكارتات)',
@@ -816,6 +922,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       value: Formatters.money(_depositsTotal),
                       color: Colors.green.shade800,
                       icon: Icons.account_balance_wallet_outlined,
+                      onTap: () => _showDepositsDetail(todayOnly: false),
                     ),
                     _StatCard(
                       title: _hasDateFilter
@@ -865,6 +972,7 @@ class _StatCard extends StatelessWidget {
     required this.icon,
     this.subtitle,
     this.wide = false,
+    this.onTap,
   });
 
   final String title;
@@ -873,6 +981,7 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final String? subtitle;
   final bool wide;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -881,7 +990,7 @@ class _StatCard extends StatelessWidget {
         ? (width >= 900 ? 340.0 : width - 32)
         : (width >= 900 ? 220.0 : (width - 44) / 2);
 
-    return Container(
+    final card = Container(
       width: cardWidth,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -905,6 +1014,12 @@ class _StatCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onTap != null)
+                Icon(
+                  Icons.touch_app_outlined,
+                  size: 16,
+                  color: color.withValues(alpha: 0.55),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -927,6 +1042,16 @@ class _StatCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+
+    if (onTap == null) return card;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: card,
       ),
     );
   }
