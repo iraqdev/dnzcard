@@ -24,6 +24,9 @@ class OrderModel {
     this.fazerCostRate = 0,
     this.fazerUnitCost = 0,
     this.fazerKind = '',
+    this.unitCostPrice = 0,
+    this.chargedUnitPrice = 0,
+    this.chargedTotal = 0,
   });
 
   final String id;
@@ -47,6 +50,11 @@ class OrderModel {
   final double fazerCostRate;
   final double fazerUnitCost;
   final String fazerKind;
+  /// تكلفة الوحدة وقت الشراء — لا تتأثر بتغيير سعر المنتج لاحقاً.
+  final double unitCostPrice;
+  /// سعر البيع الفعلي المخصوم من المحفظة (مخفي أو ظاهر) وقت الشراء.
+  final double chargedUnitPrice;
+  final double chargedTotal;
 
   /// تكلفة الوحدة لفايزr — مُثبتة وقت الشراء ولا تتأثر بتغيير الإعدادات لاحقاً.
   double get fazerOrderUnitCost {
@@ -65,6 +73,18 @@ class OrderModel {
 
   /// رقم الطباعة التالي الذي يُظهر على الورقة.
   int get nextPrintNumber => printCount + 1;
+
+  /// سعر البيع للإحصائيات — من الطلب وقت الشراء وليس من المنتج الحالي.
+  double saleUnitForStats({double? fallbackProductCost}) {
+    if (chargedUnitPrice > 0) return chargedUnitPrice;
+    if (chargedTotal > 0 && quantity > 0) return chargedTotal / quantity;
+    return unitPrice;
+  }
+
+  /// تكلفة الوحدة للإحصائيات — من الطلب وقت الشراء فقط.
+  double costUnitForStats() {
+    return unitCostPrice > 0 ? unitCostPrice : 0;
+  }
 
   /// للتوافق مع الشاشات القديمة التي تعتمد على قائمة الرموز فقط.
   List<String> get cardCodes =>
@@ -109,6 +129,9 @@ class OrderModel {
       fazerCostRate: (d['fazerCostRate'] as num?)?.toDouble() ?? 0,
       fazerUnitCost: (d['fazerUnitCost'] as num?)?.toDouble() ?? 0,
       fazerKind: d['fazerKind']?.toString() ?? '',
+      unitCostPrice: (d['unitCostPrice'] as num?)?.toDouble() ?? 0,
+      chargedUnitPrice: (d['chargedUnitPrice'] as num?)?.toDouble() ?? 0,
+      chargedTotal: (d['chargedTotal'] as num?)?.toDouble() ?? 0,
     );
   }
 

@@ -152,7 +152,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
         _products = products.length;
         _productsById = byId;
         _inventoryCost = inventoryCost;
-        _recomputeOrderStats();
       });
     }, onError: _onError);
 
@@ -446,13 +445,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
         soldToday += cards;
       }
 
-      final product = _productsById[order.productId];
-      final unitRevenue = product == null
-          ? order.unitPrice
-          : (product.hiddenSalePrice != null && product.hiddenSalePrice! > 0
-              ? product.hiddenSalePrice!
-              : product.price);
-      final unitCost = product?.costPrice ?? 0;
+      final unitRevenue = order.saleUnitForStats();
+      final unitCost = order.costUnitForStats();
       final lineProfit = (unitRevenue - unitCost) * cards;
       salesWithProfit += unitRevenue * cards;
       salesCostOnly += unitCost * cards;

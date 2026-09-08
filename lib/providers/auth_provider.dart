@@ -83,6 +83,17 @@ class AuthProvider extends ChangeNotifier {
   Future<void> login(String phone, String password) =>
       loginAdmin(phone, password);
 
+  /// الخروج من وضع الضيف للانتقال إلى تسجيل الدخول أو إنشاء حساب.
+  Future<void> exitGuestMode() async {
+    _localGuestMode = false;
+    final firebaseUser = _auth.currentFirebaseUser;
+    if (firebaseUser != null && firebaseUser.isAnonymous) {
+      await _auth.logout();
+      return;
+    }
+    notifyListeners();
+  }
+
   /// دخول كضيف — تصفح المتجر بدون حساب (موبايل فقط).
   Future<void> loginAsGuest() async {
     _error = null;

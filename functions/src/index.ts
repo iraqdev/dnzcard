@@ -598,6 +598,7 @@ export {
 export {scanCardImage} from "./card_ocr";
 
 export {purchaseLocalProduct} from "./local_purchase";
+export {adminBackfillOrderSnapshots} from "./order_snapshots_backfill";
 
 export {onInventoryCodeCreated} from "./inventory_upload_trigger";
 

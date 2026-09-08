@@ -123,7 +123,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Text(_busy ? 'جاري الإنشاء...' : 'إنشاء الحساب'),
           ),
           TextButton(
-            onPressed: () => context.go('/login'),
+            onPressed: _busy
+                ? null
+                : () async {
+                    await context.read<AuthProvider>().exitGuestMode();
+                    if (!context.mounted) return;
+                    context.go('/login');
+                  },
             child: const Text('لديك حساب؟ ادخل من هنا'),
           ),
         ],

@@ -34,7 +34,7 @@ const _fazerPrefix = 'fazer:';
 
 void _guardGuestPurchase(BuildContext context, VoidCallback action) {
   if (context.read<AuthProvider>().isGuest) {
-    context.push('/register');
+    context.push('/login');
     return;
   }
   action();

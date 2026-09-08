@@ -72,6 +72,7 @@ export const purchaseLocalProduct = onCall(
       const hidden = Number(productData.hiddenSalePrice);
       const chargedUnit =
         Number.isFinite(hidden) && hidden > 0 ? hidden : unitPrice;
+      const unitCostPrice = Number(productData.costPrice || 0);
       const total = unitPrice * quantity;
       const chargedTotal = chargedUnit * quantity;
       const balance = Number(shopData?.walletBalance || 0);
@@ -124,6 +125,8 @@ export const purchaseLocalProduct = onCall(
         companyName,
         quantity,
         unitPrice,
+        unitCostPrice,
+        chargedUnitPrice: chargedUnit,
         total,
         cardItems,
         cardCodes,

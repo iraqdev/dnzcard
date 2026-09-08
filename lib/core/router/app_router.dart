@@ -47,16 +47,13 @@ GoRouter createAppRouter(AuthProvider auth) {
 
       if (auth.isGuest) {
         if (kIsWeb) return '/login';
-        if (loggingIn) return '/store';
+        if (loggingIn || loc == '/register' || forgot || otp) return null;
         if (loc == '/wallet' ||
             loc == '/profile' ||
             loc == '/notifications' ||
             loc == '/printer-settings' ||
-            loc == '/complete-profile' ||
-            loc == '/forgot-password' ||
-            loc == '/otp' ||
-            loc == '/pending') {
-          return '/register';
+            loc == '/complete-profile') {
+          return '/login';
         }
         if (loc.startsWith('/admin')) return '/store';
         return null;

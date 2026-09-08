@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
-import '../../models/app_user.dart';
 import '../../models/wallet_transaction.dart';
 import '../../services/admin_service.dart';
 import '../../services/wallet_service.dart';
@@ -15,7 +14,6 @@ class AdminWalletsPage extends StatefulWidget {
 
 class _AdminWalletsPageState extends State<AdminWalletsPage> {
   String? _userId;
-  final _shopSearch = TextEditingController();
   final _amount = TextEditingController();
   final _reason = TextEditingController(text: 'شحن رصيد من الإدارة');
   String _type = 'credit';
@@ -25,18 +23,9 @@ class _AdminWalletsPageState extends State<AdminWalletsPage> {
 
   @override
   void dispose() {
-    _shopSearch.dispose();
     _amount.dispose();
     _reason.dispose();
     super.dispose();
-  }
-
-  bool _matchesShopQuery(AppUser user, String query) {
-    final q = query.trim().toLowerCase();
-    if (q.isEmpty) return true;
-    return user.shopName.toLowerCase().contains(q) ||
-        user.name.toLowerCase().contains(q) ||
-        user.phone.contains(q);
   }
 
   Future<void> _submit() async {
@@ -76,43 +65,29 @@ class _AdminWalletsPageState extends State<AdminWalletsPage> {
       body: StreamBuilder(
         stream: AdminService().watchUsers(),
         builder: (context, snapshot) {
-          final users = (snapshot.data ?? [])
-              .where((u) => u.role == 'shop')
-              .toList();
-          final filteredUsers = users
-              .where((u) => _matchesShopQuery(u, _shopSearch.text))
-              .toList();
+          final users = snapshot.data ?? [];
           _userId ??= users.isNotEmpty ? users.first.id : null;
-          final dropdownUserId = filteredUsers.any((u) => u.id == _userId)
-              ? _userId
-              : null;
+          final dropdownValue =
+              users.any((u) => u.id == _userId) ? _userId : null;
           final selected = users.where((u) => u.id == _userId).firstOrNull;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              TextField(
-                controller: _shopSearch,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'بحث',
-                  hintText: 'ابحث باسم المتجر أو رقم الهاتف',
-                  prefixIcon: Icon(Icons.search),
-                ),
-              ),
-              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: dropdownUserId,
-                items: filteredUsers
+                value: dropdownValue,
+                isExpanded: true,
+                items: users
                     .map(
                       (u) => DropdownMenuItem(
                         value: u.id,
                         child: Text(
                           '${u.shopName} (${Formatters.money(u.walletBalance)})',
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     )
                     .toList(),
-                onChanged: filteredUsers.isEmpty
+                onChanged: users.isEmpty
                     ? null
                     : (v) => setState(() => _userId = v),
                 decoration: const InputDecoration(labelText: 'المتجر'),

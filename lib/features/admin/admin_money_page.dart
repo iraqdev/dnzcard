@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
-import '../../models/catalog_models.dart';
 import '../../models/order_model.dart';
 
 enum _MoneySection { asia, zain, korek, baly }
@@ -21,10 +20,8 @@ class _AdminMoneyPageState extends State<AdminMoneyPage> {
   final _db = FirebaseFirestore.instance;
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _ordersSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _productsSub;
 
   List<OrderModel> _orders = [];
-  Map<String, Product> _productsById = {};
 
   _MoneySection _section = _MoneySection.asia;
   DateTime? _fromDate;
@@ -46,18 +43,6 @@ class _AdminMoneyPageState extends State<AdminMoneyPage> {
   }
 
   void _listen() {
-    _productsSub = _db.collection('products').snapshots().listen((snap) {
-      if (!mounted) return;
-      final byId = <String, Product>{};
-      for (final doc in snap.docs) {
-        try {
-          final p = Product.fromFirestore(doc);
-          byId[p.id] = p;
-        } catch (_) {}
-      }
-      setState(() => _productsById = byId);
-    }, onError: _onError);
-
     _subscribeOrders();
   }
 
@@ -109,7 +94,6 @@ class _AdminMoneyPageState extends State<AdminMoneyPage> {
   @override
   void dispose() {
     _ordersSub?.cancel();
-    _productsSub?.cancel();
     super.dispose();
   }
 
@@ -157,9 +141,7 @@ class _AdminMoneyPageState extends State<AdminMoneyPage> {
     return order.quantity < 1 ? 1 : order.quantity;
   }
 
-  double _unitCost(OrderModel order) {
-    return _productsById[order.productId]?.costPrice ?? 0;
-  }
+  double _unitCost(OrderModel order) => order.costUnitForStats();
 
   _MoneyStats _computeStats() {
     final byDenom = <String, _DenomRow>{};
